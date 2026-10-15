@@ -109,14 +109,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Fallback check if server offline: local allowlist check
       const normalized = email.trim().toLowerCase();
       const isNafid = normalized.includes('nafid');
+      const isSulthan = normalized.includes('pullat') || normalized === 'pullatsulthan@gmail.com';
       const isAflah = normalized.includes('aflah');
 
-      if (isNafid || isAflah) {
+      if (isNafid || isAflah || isSulthan) {
         const fallbackUser: GoogleAuthUser = {
-          id: isNafid ? 'goog_nafid_rz' : 'goog_aflah_rz',
+          id: isNafid ? 'goog_nafid_rz' : isSulthan ? 'goog_sulthan_rz' : 'goog_aflah_rz',
           email: normalized,
-          name: displayName || (isNafid ? 'Nafid Khan' : 'Aflah RZ'),
-          shortName: isNafid ? 'Nafid' : 'Aflah',
+          name: displayName || (isNafid ? 'Nafid Khan' : isSulthan ? 'Sulthan Pullat' : 'Aflah RZ'),
+          shortName: isNafid ? 'Nafid' : isSulthan ? 'Sulthan' : 'Aflah',
           picture,
           verifiedAt: new Date().toISOString(),
         };

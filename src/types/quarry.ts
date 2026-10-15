@@ -1,10 +1,10 @@
-export type AppUser = 'Nafid' | 'Aflah';
+export type AppUser = 'Nafid' | 'Aflah' | 'Sulthan';
 
 export interface GoogleAuthUser {
   id: string; // Google User ID / sub
   email: string;
   name: string; // Full display name
-  shortName: 'Nafid' | 'Aflah'; // Standard operator name
+  shortName: 'Nafid' | 'Aflah' | 'Sulthan'; // Standard operator name
   picture?: string;
   verifiedAt: string;
 }

@@ -39,6 +39,7 @@ if (!fs.existsSync(DATA_DIR)) {
 const DEFAULT_AUTHORIZED_EMAILS = [
   'nafidkhan@racezoneventures.com',
   'aflah@racezoneventures.com',
+  'pullatsulthan@gmail.com',
 ];
 
 function getAllowlist(): string[] {
@@ -62,21 +63,28 @@ function resolveUserIdentity(email: string) {
     (allowed) =>
       normalized === allowed ||
       (allowed.startsWith('nafid') && normalized.includes('nafid')) ||
-      (allowed.startsWith('aflah') && normalized.includes('aflah'))
+      (allowed.startsWith('aflah') && normalized.includes('aflah')) ||
+      (allowed.startsWith('pullat') && normalized.includes('pullat'))
   );
 
   if (!isAuthorized) {
     return null;
   }
 
-  // Determine if Nafid or Aflah
-  const isNafid =
-    normalized.includes('nafid') || normalized === 'nafidkhan@racezoneventures.com';
-  const shortName = isNafid ? 'Nafid' : 'Aflah';
-  const name = isNafid ? 'Nafid Khan' : 'Aflah RZ';
+  // Determine user shortName & name
+  let shortName: 'Nafid' | 'Aflah' | 'Sulthan' = 'Aflah';
+  let name = 'Aflah RZ';
+
+  if (normalized.includes('nafid') || normalized === 'nafidkhan@racezoneventures.com') {
+    shortName = 'Nafid';
+    name = 'Nafid Khan';
+  } else if (normalized.includes('pullat') || normalized === 'pullatsulthan@gmail.com') {
+    shortName = 'Sulthan';
+    name = 'Sulthan Pullat';
+  }
 
   return {
-    shortName: shortName as 'Nafid' | 'Aflah',
+    shortName,
     name,
     email: normalized,
   };
@@ -312,7 +320,13 @@ app.post('/api/auth/verify', (req: Request, res: Response) => {
     console.log(`[AUTH] Access Granted for ${resolved.shortName} (${targetEmail})`);
 
     const user = {
-      id: targetGoogleId || (resolved.shortName === 'Nafid' ? 'goog_nafid_rz' : 'goog_aflah_rz'),
+      id:
+        targetGoogleId ||
+        (resolved.shortName === 'Nafid'
+          ? 'goog_nafid_rz'
+          : resolved.shortName === 'Sulthan'
+          ? 'goog_sulthan_rz'
+          : 'goog_aflah_rz'),
       email: targetEmail,
       name: targetName || resolved.name,
       shortName: resolved.shortName,
@@ -320,6 +334,8 @@ app.post('/api/auth/verify', (req: Request, res: Response) => {
         targetPicture ||
         (resolved.shortName === 'Nafid'
           ? 'https://ui-avatars.com/api/?name=Nafid+Khan&background=d4af37&color=090a0d&bold=true'
+          : resolved.shortName === 'Sulthan'
+          ? 'https://ui-avatars.com/api/?name=Sulthan+Pullat&background=d4af37&color=090a0d&bold=true'
           : 'https://ui-avatars.com/api/?name=Aflah+RZ&background=d4af37&color=090a0d&bold=true'),
       verifiedAt: new Date().toISOString(),
     };
@@ -489,11 +505,17 @@ app.post('/api/statements', (req: Request, res: Response) => {
   stmt.created_by_name = stmt.created_by_name || stmt.generatedBy || 'Nafid';
   stmt.created_by_user_id =
     stmt.created_by_user_id ||
-    (stmt.generatedBy === 'Nafid' ? 'goog_nafid_rz' : 'goog_aflah_rz');
+    (stmt.generatedBy === 'Nafid'
+      ? 'goog_nafid_rz'
+      : stmt.generatedBy === 'Sulthan'
+      ? 'goog_sulthan_rz'
+      : 'goog_aflah_rz');
   stmt.created_by_email =
     stmt.created_by_email ||
     (stmt.generatedBy === 'Nafid'
       ? 'nafidkhan@racezoneventures.com'
+      : stmt.generatedBy === 'Sulthan'
+      ? 'pullatsulthan@gmail.com'
       : 'aflah@racezoneventures.com');
   db.statements = [stmt, ...(db.statements || [])];
   saveDatabase(db);

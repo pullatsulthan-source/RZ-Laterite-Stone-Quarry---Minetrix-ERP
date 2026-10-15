@@ -219,6 +219,36 @@ export const GoogleAuthScreen: React.FC = () => {
                   Authorized
                 </span>
               </button>
+
+              {/* Account 3: Sulthan (Owner) */}
+              <button
+                onClick={() =>
+                  handleSelectAccount(
+                    'pullatsulthan@gmail.com',
+                    'Sulthan Pullat',
+                    'https://ui-avatars.com/api/?name=Sulthan+Pullat&background=d4af37&color=090a0d&bold=true'
+                  )
+                }
+                disabled={isVerifying}
+                className="w-full p-3 rounded-xl bg-[#171a25] hover:bg-[#202534] border border-[#272e42] flex items-center justify-between text-left transition-colors cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#e6b800] text-black font-black flex items-center justify-center text-sm shadow">
+                    S
+                  </div>
+                  <div>
+                    <span className="font-bold text-sm text-gray-100 block group-hover:text-[#f3c64c]">
+                      Sulthan
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono">
+                      pullatsulthan@gmail.com
+                    </span>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#d4af37]/20 text-[#f3c64c] border border-[#d4af37]/30">
+                  Authorized
+                </span>
+              </button>
             </div>
 
             {/* Test another Google account to verify access restriction */}
