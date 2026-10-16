@@ -4,6 +4,7 @@ import { LoadOrder, Customer, PaymentMode } from '../../types/quarry';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
 // Existing Views
+import { OrderManagementView } from '../OrderManagementView';
 import { LoadManagementView } from '../LoadManagementView';
 import { CustomerManagementView } from '../CustomerManagementView';
 import { CustomerAccountsView } from '../CustomerAccountsView';
@@ -33,6 +34,7 @@ import {
 
 export type OrderSubTab =
   | 'orders'
+  | 'loads'
   | 'customers'
   | 'agents'
   | 'rate_master'
@@ -62,7 +64,7 @@ export const OrderModuleView: React.FC<OrderModuleViewProps> = ({
   onOpenPaymentModal,
   initialTab = 'orders',
 }) => {
-  const { loads, customers, payments, stock, rates } = useQuarry();
+  const { loads, customers, payments, stock, rates, orders } = useQuarry();
 
   const [activeTab, setActiveTab] = useState<OrderSubTab>(initialTab);
 
@@ -127,15 +129,16 @@ export const OrderModuleView: React.FC<OrderModuleViewProps> = ({
   }, [loads]);
 
   // Order Metrics
-  const totalOrders = loads.length;
-  const activeOrders = loads.filter((l) => l.status === 'Draft' || l.status === 'Loaded').length;
-  const dispatchedOrders = loads.filter((l) => l.status === 'Gate Pass Generated' || l.status === 'Dispatched').length;
-  const totalOrderRevenue = loads.reduce((sum, l) => sum + (l.customerSaleAmount || l.quarryAmount || 0), 0);
-  const totalPaymentsReceived = loads.reduce((sum, l) => sum + (l.paymentReceived || 0), 0);
+  const totalOrders = orders.length;
+  const activeOrders = orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'PAID' && o.status !== 'CANCELLED').length;
+  const dispatchedOrders = orders.filter((o) => o.status === 'DISPATCHED' || o.status === 'DELIVERED').length;
+  const totalOrderRevenue = orders.reduce((sum, o) => sum + (o.grossAmount || 0), 0);
+  const totalPaymentsReceived = orders.reduce((sum, o) => sum + (o.paymentReceived || 0), 0);
   const totalOutstanding = totalOrderRevenue - totalPaymentsReceived;
 
   const subTabs = [
-    { id: 'orders', label: 'Customer Orders', icon: FileText, badge: `${loads.length}` },
+    { id: 'orders', label: 'Stone Orders & Workflow', icon: FileText, badge: `${orders.length}` },
+    { id: 'loads', label: 'Quarry Dispatches & Loads', icon: Truck, badge: `${loads.length}` },
     { id: 'customers', label: 'Customer Master', icon: Building2, badge: `${customers.length}` },
     { id: 'agents', label: 'Orderman & Commission', icon: Users2, badge: `${ordermen.length}` },
     { id: 'rate_master', label: 'Rate Master', icon: Percent },
@@ -259,6 +262,14 @@ export const OrderModuleView: React.FC<OrderModuleViewProps> = ({
       {/* Sub-View Content */}
       <div className="pt-1">
         {activeTab === 'orders' && (
+          <OrderManagementView
+            onOpenNewLoad={onOpenNewLoad}
+            onViewGatePass={onViewGatePass}
+            onViewCustomerLedger={onViewCustomerLedger}
+          />
+        )}
+
+        {activeTab === 'loads' && (
           <div className="space-y-4">
             {/* Live Pipeline Flow Visualizer */}
             <div className="p-3.5 rounded-2xl bg-[#12141a] border border-[#232736] flex flex-wrap items-center justify-between gap-3 text-xs">

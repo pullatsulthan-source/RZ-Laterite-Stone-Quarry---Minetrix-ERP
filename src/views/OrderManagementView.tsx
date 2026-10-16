@@ -6,7 +6,9 @@ import {
   OrderPaymentTerms,
   MaterialType,
   PaymentMode,
+  PaymentCollectionMode,
 } from '../types/quarry';
+import { DriverCollectionsView } from './DriverCollectionsView';
 import {
   formatCurrency,
   formatNumber,
@@ -41,6 +43,7 @@ import {
   Layers,
   ChevronRight,
   ShieldCheck,
+  HandCoins,
 } from 'lucide-react';
 
 interface OrderManagementViewProps {
@@ -82,7 +85,13 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
     advanceOrderWorkflow,
     assignVehicleToOrder,
     dispatchOrder,
+    driverCollections,
+    addDriverCollection,
+    settleDriverCollection,
   } = useQuarry();
+
+  // Active Tab inside Order Management: Orders Pipeline vs Driver Payment Collections
+  const [activeOrderViewTab, setActiveOrderViewTab] = useState<'pipeline' | 'driver_collections'>('pipeline');
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -127,6 +136,9 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
   // Payment Recording Form State
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('Cash');
+  const [paymentCollectionMode, setPaymentCollectionMode] = useState<PaymentCollectionMode>('DRIVER COLLECTION');
+  const [paymentDriver, setPaymentDriver] = useState('');
+  const [paymentVehicle, setPaymentVehicle] = useState('');
   const [paymentRef, setPaymentRef] = useState('');
 
   // Handle open create order modal
@@ -307,6 +319,9 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
     setActiveOrder(order);
     setPaymentAmount(String(order.balance || order.grossAmount));
     setPaymentMode('Cash');
+    setPaymentCollectionMode(order.assignedVehicle ? 'DRIVER COLLECTION' : 'CUSTOMER DIRECT');
+    setPaymentDriver(order.driver || '');
+    setPaymentVehicle(order.assignedVehicle || '');
     setPaymentRef('');
     setShowPaymentModal(true);
   };
@@ -320,6 +335,28 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
     const newPaid = (activeOrder.paymentReceived || 0) + amt;
     const newBal = Math.max(0, activeOrder.grossAmount - newPaid);
     const newStatus: OrderStatus = newBal <= 0 ? 'PAID' : 'PARTIALLY PAID';
+
+    // If Payment Collection Mode = DRIVER COLLECTION
+    // Order → Delivery → Driver Collects → Driver Collection Entry → UNSETTLED DRIVER COLLECTION → Company Settlement
+    // Do NOT immediately mark the amount as settled company cash.
+    if (paymentCollectionMode === 'DRIVER COLLECTION') {
+      addDriverCollection({
+        orderId: activeOrder.orderId,
+        driver: paymentDriver || activeOrder.driver || 'Driver',
+        vehicle: paymentVehicle || activeOrder.assignedVehicle || 'Vehicle',
+        customer: activeOrder.customer,
+        customerId: activeOrder.customerId,
+        amount: amt,
+        date: getTodayDateString(),
+        paymentMode: paymentMode,
+        settlementStatus: 'UNSETTLED',
+        unsettledAmount: amt,
+        settledAmount: 0,
+        remarks: paymentRef
+          ? `${paymentRef} (Driver collection at site)`
+          : `Driver ${paymentDriver || activeOrder.driver || ''} collected on delivery at ${activeOrder.deliveryLocation}`,
+      });
+    }
 
     advanceOrderWorkflow(activeOrder.id, newStatus, {
       paymentReceived: newPaid,
@@ -377,12 +414,80 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
           </div>
         </div>
 
-        {/* 2. Interactive 9-Stage Workflow Pipeline Track */}
-        <div className="mt-5 pt-4 border-t border-[#1e2436]">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-2 flex items-center justify-between">
-            <span>Official Quarry Workflow Progression</span>
-            <span className="text-gray-500">Click any stage to filter orders</span>
+        {/* View Switcher: Orders Pipeline vs Driver Payment Collections */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-[#1e2436]">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveOrderViewTab('pipeline')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeOrderViewTab === 'pipeline'
+                  ? 'bg-amber-400 text-black font-black shadow-md shadow-amber-400/20'
+                  : 'bg-[#141824] text-gray-300 hover:text-white border border-[#22283a]'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>9-Stage Order Pipeline</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-black/25">
+                {orders.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveOrderViewTab('driver_collections')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeOrderViewTab === 'driver_collections'
+                  ? 'bg-gradient-to-r from-orange-400 to-amber-500 text-black font-black shadow-md shadow-orange-400/20'
+                  : 'bg-[#141824] text-gray-300 hover:text-white border border-[#22283a]'
+              }`}
+            >
+              <HandCoins className="w-4 h-4" />
+              <span>Driver Payment Collections</span>
+              {driverCollections.filter((c) => c.settlementStatus === 'UNSETTLED').length > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-orange-600 text-white animate-pulse">
+                  {driverCollections.filter((c) => c.settlementStatus === 'UNSETTLED').length} Unsettled
+                </span>
+              )}
+            </button>
           </div>
+
+          {driverCollections.filter((c) => c.settlementStatus === 'UNSETTLED').length > 0 && (
+            <div
+              onClick={() => setActiveOrderViewTab('driver_collections')}
+              className="text-[11px] text-orange-400 bg-orange-950/40 px-3 py-1 rounded-xl border border-orange-800/40 flex items-center gap-1.5 cursor-pointer hover:bg-orange-950/60 transition-all"
+            >
+              <Clock className="w-3.5 h-3.5 animate-spin" />
+              <span>
+                <strong>
+                  {formatCurrency(
+                    driverCollections.reduce(
+                      (sum, c) =>
+                        sum + (c.unsettledAmount ?? (c.amount - (c.settledAmount || 0))),
+                      0
+                    )
+                  )}
+                </strong>{' '}
+                held with drivers • Click to settle
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {activeOrderViewTab === 'driver_collections' ? (
+        <DriverCollectionsView
+          onViewOrder={(ordId) => {
+            setSearchTerm(ordId);
+            setActiveOrderViewTab('pipeline');
+          }}
+        />
+      ) : (
+        <>
+          {/* 2. Interactive 9-Stage Workflow Pipeline Track */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-[#10141f] border border-[#232a3e] relative overflow-hidden shadow-xl">
+            <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-2 flex items-center justify-between">
+              <span>Official Quarry Workflow Progression</span>
+              <span className="text-gray-500">Click any stage to filter orders</span>
+            </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2 overflow-x-auto pb-1">
             {WORKFLOW_STAGES.map((stage) => {
@@ -429,7 +534,6 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
             })}
           </div>
         </div>
-      </div>
 
       {/* 3. KPI Metrics Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
@@ -832,6 +936,8 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {/* 6. MODAL: Create New Stone Order */}
       {showCreateModal && (
@@ -1273,6 +1379,68 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
                 </div>
               </div>
 
+              {/* Payment Collection Mode (Prompt 2 Requirement) */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
+                  <span>Payment Collection Mode *</span>
+                  <span className="text-[10px] text-gray-400 font-normal">Internal Workflow Engine</span>
+                </label>
+                <select
+                  value={paymentCollectionMode}
+                  onChange={(e) => setPaymentCollectionMode(e.target.value as PaymentCollectionMode)}
+                  className="w-full bg-[#161a26] border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
+                >
+                  <option value="DRIVER COLLECTION">DRIVER COLLECTION (Cash collected on delivery site)</option>
+                  <option value="CUSTOMER DIRECT">CUSTOMER DIRECT (Client paid directly to company)</option>
+                  <option value="ORDERMAN COLLECTION">ORDERMAN COLLECTION (Agent collected payment)</option>
+                  <option value="OFFICE COLLECTION">OFFICE COLLECTION (Cash paid at quarry counter)</option>
+                  <option value="BANK TRANSFER">BANK TRANSFER (Direct NEFT / RTGS / Company Current A/c)</option>
+                </select>
+              </div>
+
+              {/* Driver & Vehicle fields if DRIVER COLLECTION */}
+              {paymentCollectionMode === 'DRIVER COLLECTION' && (
+                <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                    <Truck className="w-4 h-4" />
+                    <span>Driver Custody Details</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <label className="text-[10px] text-gray-400 uppercase font-bold block mb-0.5">
+                        Collecting Driver
+                      </label>
+                      <input
+                        type="text"
+                        value={paymentDriver}
+                        onChange={(e) => setPaymentDriver(e.target.value)}
+                        placeholder="Driver Name"
+                        className="w-full bg-[#121520] border border-[#2b334a] rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 uppercase font-bold block mb-0.5">
+                        Vehicle
+                      </label>
+                      <input
+                        type="text"
+                        value={paymentVehicle}
+                        onChange={(e) => setPaymentVehicle(e.target.value)}
+                        placeholder="Vehicle Number"
+                        className="w-full bg-[#121520] border border-[#2b334a] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                    ⚠️ <strong>Driver Collection Rule:</strong> This payment creates an{' '}
+                    <strong className="text-amber-300">UNSETTLED DRIVER COLLECTION</strong> entry. The amount
+                    remains in driver custody until company settlement handover at the quarry office.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                   Collection Amount (₹) *
@@ -1291,7 +1459,7 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                    Payment Mode
+                    Payment Instrument
                   </label>
                   <select
                     value={paymentMode}
@@ -1299,7 +1467,7 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
                     className="w-full bg-[#161a26] border border-[#283045] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
                   >
                     <option value="Cash">Cash</option>
-                    <option value="UPI">UPI</option>
+                    <option value="UPI">UPI / GPay</option>
                     <option value="Bank">Bank Transfer</option>
                     <option value="Cheque">Cheque</option>
                   </select>
@@ -1313,7 +1481,7 @@ export const OrderManagementView: React.FC<OrderManagementViewProps> = ({
                     type="text"
                     value={paymentRef}
                     onChange={(e) => setPaymentRef(e.target.value)}
-                    placeholder="e.g. UPI-9921"
+                    placeholder="e.g. UPI-9921 / Counter slip"
                     className="w-full bg-[#161a26] border border-[#283045] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-400"
                   />
                 </div>

@@ -8,6 +8,7 @@ import { VehicleManagementView } from '../VehicleManagementView';
 import { DriverManagementView } from '../DriverManagementView';
 import { VehicleAccountsView } from '../VehicleAccountsView';
 import { DriverAccountsView } from '../DriverAccountsView';
+import { DriverCollectionsView } from '../DriverCollectionsView';
 import { VehicleRotationView } from '../VehicleRotationView';
 
 import {
@@ -85,6 +86,7 @@ export const VehicleModuleView: React.FC<VehicleModuleViewProps> = ({
   const [ledgerVehicleNumber, setLedgerVehicleNumber] = useState<string>(
     vehicles[0]?.vehicleNumber || ''
   );
+  const [driverModuleTab, setDriverModuleTab] = useState<'collections' | 'batta_accounts'>('collections');
 
   // Deriving trips dynamically from loads & gatePasses without duplicate manual entry
   const trips = useMemo(() => {
@@ -403,7 +405,40 @@ export const VehicleModuleView: React.FC<VehicleModuleViewProps> = ({
 
         {activeTab === 'accounts' && <VehicleAccountsView />}
 
-        {activeTab === 'driver_collections' && <DriverAccountsView />}
+        {activeTab === 'driver_collections' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 bg-[#12141a] p-2 rounded-2xl border border-[#232736]">
+              <button
+                onClick={() => setDriverModuleTab('collections')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  driverModuleTab === 'collections'
+                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black font-black shadow'
+                    : 'text-gray-400 hover:text-white bg-[#161924]'
+                }`}
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>On-Site Driver Collections & Handover</span>
+              </button>
+              <button
+                onClick={() => setDriverModuleTab('batta_accounts')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  driverModuleTab === 'batta_accounts'
+                    ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-black font-black shadow'
+                    : 'text-gray-400 hover:text-white bg-[#161924]'
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Driver Trip Batta & Allowance Ledger</span>
+              </button>
+            </div>
+
+            {driverModuleTab === 'collections' ? (
+              <DriverCollectionsView />
+            ) : (
+              <DriverAccountsView />
+            )}
+          </div>
+        )}
 
         {activeTab === 'ledger' && (
           <div className="space-y-4">

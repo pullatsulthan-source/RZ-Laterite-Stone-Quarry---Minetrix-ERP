@@ -28,6 +28,16 @@ import {
   StoneOrder,
   OrderStatus,
   OrderPaymentTerms,
+  QuarryProfile,
+  QuarrySection,
+  LandOwnerAccount,
+  LandPaymentEntry,
+  BrandingConfig,
+  BillingConfig,
+  AppTheme,
+  DriverCollection,
+  DriverCollectionSettlementStatus,
+  PaymentCollectionMode,
 } from '../types/quarry';
 import {
   INITIAL_RATES,
@@ -48,6 +58,10 @@ import {
   INITIAL_ROTATIONS,
   INITIAL_VEHICLE_TRANSACTIONS,
   INITIAL_ORDERS,
+  INITIAL_QUARRIES,
+  INITIAL_BRANDING,
+  INITIAL_BILLING_CONFIG,
+  INITIAL_DRIVER_COLLECTIONS,
   generateNextRotationEngine,
 } from '../data/seedData';
 import { padGatePassNumber, padLoadNumber, getTodayDateString, getCurrentTimeString } from '../utils/formatters';
@@ -56,6 +70,37 @@ interface QuarryContextType {
   currentUser: AppUser;
   setCurrentUser: (user: AppUser) => void;
   authUser: GoogleAuthUser | null;
+
+  // Multi-Quarry & Business Profile
+  quarries: QuarryProfile[];
+  activeQuarryId: string;
+  activeQuarry: QuarryProfile;
+  setActiveQuarryId: (id: string) => void;
+  addQuarry: (quarry: QuarryProfile) => void;
+  updateQuarry: (id: string, updates: Partial<QuarryProfile>) => void;
+  deleteQuarry: (id: string) => void;
+  addQuarrySection: (quarryId: string, section: QuarrySection) => void;
+  updateLandOwnerAccount: (quarryId: string, landAccount: Partial<LandOwnerAccount>) => void;
+  addLandPayment: (quarryId: string, payment: Omit<LandPaymentEntry, 'id' | 'createdAt'>) => void;
+
+  // Branding & Billing Config
+  branding: BrandingConfig;
+  updateBranding: (config: Partial<BrandingConfig>) => void;
+  billingConfig: BillingConfig;
+  updateBillingConfig: (config: Partial<BillingConfig>) => void;
+  theme: AppTheme;
+  setTheme: (theme: AppTheme) => void;
+
+  // Driver Collections (UNSETTLED DRIVER COLLECTION → Company Settlement)
+  driverCollections: DriverCollection[];
+  addDriverCollection: (
+    col: Omit<DriverCollection, 'id' | 'createdAt' | 'collectionId' | 'enteredBy'> & {
+      id?: string;
+      collectionId?: string;
+      enteredBy?: AppUser;
+    }
+  ) => DriverCollection;
+  settleDriverCollection: (id: string, settledAmount: number, notes?: string) => void;
 
   vehicles: Vehicle[];
   drivers: Driver[];
@@ -279,6 +324,49 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : (INITIAL_ORDERS || []);
   });
 
+  // Multi-Quarry & Business Profile state
+  const [quarries, setQuarries] = useState<QuarryProfile[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_quarries`);
+    return saved ? JSON.parse(saved) : (INITIAL_QUARRIES || []);
+  });
+
+  const [activeQuarryId, setActiveQuarryIdState] = useState<string>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_active_quarry_id`);
+    return saved || 'quarry-001';
+  });
+
+  const activeQuarry = useMemo(() => {
+    return quarries.find((q) => q.id === activeQuarryId) || quarries[0] || INITIAL_QUARRIES[0];
+  }, [quarries, activeQuarryId]);
+
+  // Branding & Asset Config state
+  const [branding, setBranding] = useState<BrandingConfig>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_branding`);
+    return saved ? JSON.parse(saved) : INITIAL_BRANDING;
+  });
+
+  // Billing Config state
+  const [billingConfig, setBillingConfig] = useState<BillingConfig>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_billing_config`);
+    return saved ? JSON.parse(saved) : INITIAL_BILLING_CONFIG;
+  });
+
+  // Theme state
+  const [theme, setThemeState] = useState<AppTheme>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_theme`);
+    return (saved as AppTheme) || 'rz_gold';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  // Driver Collections (UNSETTLED DRIVER COLLECTION → Company Settlement)
+  const [driverCollections, setDriverCollections] = useState<DriverCollection[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_driver_collections`);
+    return saved ? JSON.parse(saved) : (INITIAL_DRIVER_COLLECTIONS || []);
+  });
+
   // Sync state to local cache for instant offline fallback
   useEffect(() => {
     try {
@@ -301,6 +389,12 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       localStorage.setItem(`${STORAGE_KEY}_rotations`, JSON.stringify(rotations));
       localStorage.setItem(`${STORAGE_KEY}_vehicle_transactions`, JSON.stringify(vehicleTransactions));
       localStorage.setItem(`${STORAGE_KEY}_orders`, JSON.stringify(orders));
+      localStorage.setItem(`${STORAGE_KEY}_quarries`, JSON.stringify(quarries));
+      localStorage.setItem(`${STORAGE_KEY}_active_quarry_id`, activeQuarryId);
+      localStorage.setItem(`${STORAGE_KEY}_branding`, JSON.stringify(branding));
+      localStorage.setItem(`${STORAGE_KEY}_billing_config`, JSON.stringify(billingConfig));
+      localStorage.setItem(`${STORAGE_KEY}_theme`, theme);
+      localStorage.setItem(`${STORAGE_KEY}_driver_collections`, JSON.stringify(driverCollections));
     } catch (e) {
       console.warn('Cache error:', e);
     }
@@ -324,6 +418,12 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     rotations,
     vehicleTransactions,
     orders,
+    quarries,
+    activeQuarryId,
+    branding,
+    billingConfig,
+    theme,
+    driverCollections,
   ]);
 
   // Refresh data from shared backend database
@@ -356,6 +456,24 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
         if (backendDb.orders && Array.isArray(backendDb.orders) && backendDb.orders.length > 0) {
           setOrders(backendDb.orders);
+        }
+        if (backendDb.quarries && Array.isArray(backendDb.quarries) && backendDb.quarries.length > 0) {
+          setQuarries(backendDb.quarries);
+        }
+        if (backendDb.activeQuarryId) {
+          setActiveQuarryIdState(backendDb.activeQuarryId);
+        }
+        if (backendDb.branding) {
+          setBranding(backendDb.branding);
+        }
+        if (backendDb.billingConfig) {
+          setBillingConfig(backendDb.billingConfig);
+        }
+        if (backendDb.theme) {
+          setThemeState(backendDb.theme);
+        }
+        if (backendDb.driverCollections && Array.isArray(backendDb.driverCollections) && backendDb.driverCollections.length > 0) {
+          setDriverCollections(backendDb.driverCollections);
         }
       }
     } catch (err) {
@@ -1204,6 +1322,12 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setRotations(INITIAL_ROTATIONS);
     setVehicleTransactions(INITIAL_VEHICLE_TRANSACTIONS);
     setOrders(INITIAL_ORDERS);
+    setQuarries(INITIAL_QUARRIES);
+    setActiveQuarryIdState('quarry-001');
+    setBranding(INITIAL_BRANDING);
+    setBillingConfig(INITIAL_BILLING_CONFIG);
+    setThemeState('rz_gold');
+    setDriverCollections(INITIAL_DRIVER_COLLECTIONS);
 
     fetch('/api/reset', { method: 'POST' }).catch(console.error);
   };
@@ -1231,6 +1355,12 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       rotations,
       vehicleTransactions,
       orders,
+      quarries,
+      activeQuarryId,
+      branding,
+      billingConfig,
+      theme,
+      driverCollections,
     };
     return JSON.stringify(backup, null, 2);
   };
@@ -1257,6 +1387,12 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (data.rotations) setRotations(data.rotations);
       if (data.vehicleTransactions) setVehicleTransactions(data.vehicleTransactions);
       if (data.orders) setOrders(data.orders);
+      if (data.quarries) setQuarries(data.quarries);
+      if (data.activeQuarryId) setActiveQuarryIdState(data.activeQuarryId);
+      if (data.branding) setBranding(data.branding);
+      if (data.billingConfig) setBillingConfig(data.billingConfig);
+      if (data.theme) setThemeState(data.theme);
+      if (data.driverCollections) setDriverCollections(data.driverCollections);
 
       fetch('/api/import', {
         method: 'POST',
@@ -1704,12 +1840,282 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [orders, vehicles, loads, rates, createLoad, confirmAndGenerateGatePass, updateOrder]
   );
 
+  // Multi-Quarry & Land Owner Actions
+  const setActiveQuarryId = useCallback((id: string) => {
+    setActiveQuarryIdState(id);
+    localStorage.setItem(`${STORAGE_KEY}_active_quarry_id`, id);
+    fetch('/api/active-quarry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activeQuarryId: id }),
+    }).catch(console.error);
+  }, []);
+
+  const addQuarry = useCallback((quarry: QuarryProfile) => {
+    setQuarries((prev) => [...prev, quarry]);
+    fetch('/api/quarries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(quarry),
+    }).catch(console.error);
+  }, []);
+
+  const updateQuarry = useCallback((id: string, updates: Partial<QuarryProfile>) => {
+    setQuarries((prev) => prev.map((q) => (q.id === id ? { ...q, ...updates } : q)));
+    fetch(`/api/quarries/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch(console.error);
+  }, []);
+
+  const deleteQuarry = useCallback((id: string) => {
+    setQuarries((prev) => prev.filter((q) => q.id !== id));
+    fetch(`/api/quarries/${id}`, { method: 'DELETE' }).catch(console.error);
+  }, []);
+
+  const addQuarrySection = useCallback((quarryId: string, section: QuarrySection) => {
+    setQuarries((prev) =>
+      prev.map((q) => {
+        if (q.id === quarryId) {
+          const sections = [...(q.sections || []).filter((s) => s.id !== section.id), section];
+          const updated = { ...q, sections };
+          fetch(`/api/quarries/${quarryId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated),
+          }).catch(console.error);
+          return updated;
+        }
+        return q;
+      })
+    );
+  }, []);
+
+  const updateLandOwnerAccount = useCallback(
+    (quarryId: string, landAccount: Partial<LandOwnerAccount>) => {
+      setQuarries((prev) =>
+        prev.map((q) => {
+          if (q.id === quarryId) {
+            const existing: LandOwnerAccount = q.landOwnerAccount || {
+              id: `land-${quarryId}`,
+              quarryId,
+              landOwnerName: 'Hameed Haji',
+              totalLandCent: 20,
+              initialCuttingAgreementCent: 14,
+              referenceRatePerCent: 140000,
+              referenceAgreementValue: 1960000,
+              remainingCent: 6,
+              paidAmount: 0,
+              balanceAmount: 1960000,
+              outstandingAmount: 1960000,
+              adjustments: 0,
+              notes: '',
+              documents: [],
+              payments: [],
+            };
+            const merged = { ...existing, ...landAccount };
+            merged.balanceAmount = Math.max(
+              0,
+              (merged.referenceAgreementValue || 0) - (merged.paidAmount || 0)
+            );
+            merged.outstandingAmount = merged.balanceAmount;
+            const updated = { ...q, landOwnerAccount: merged };
+            fetch(`/api/quarries/${quarryId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            }).catch(console.error);
+            return updated;
+          }
+          return q;
+        })
+      );
+    },
+    []
+  );
+
+  const addLandPayment = useCallback(
+    (quarryId: string, paymentData: Omit<LandPaymentEntry, 'id' | 'createdAt'>) => {
+      const payment: LandPaymentEntry = {
+        ...paymentData,
+        id: `lp-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      };
+      setQuarries((prev) =>
+        prev.map((q) => {
+          if (q.id === quarryId && q.landOwnerAccount) {
+            const payments = [payment, ...(q.landOwnerAccount.payments || [])];
+            const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+            const balanceAmount = Math.max(
+              0,
+              q.landOwnerAccount.referenceAgreementValue - paidAmount
+            );
+            const updatedLand = {
+              ...q.landOwnerAccount,
+              payments,
+              paidAmount,
+              balanceAmount,
+              outstandingAmount: balanceAmount,
+            };
+            const updated = { ...q, landOwnerAccount: updatedLand };
+            fetch(`/api/quarries/${quarryId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            }).catch(console.error);
+            return updated;
+          }
+          return q;
+        })
+      );
+    },
+    []
+  );
+
+  // Branding & Billing Actions
+  const updateBranding = useCallback((config: Partial<BrandingConfig>) => {
+    setBranding((prev) => {
+      const updated = { ...prev, ...config };
+      fetch('/api/branding', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      }).catch(console.error);
+      return updated;
+    });
+  }, []);
+
+  const updateBillingConfig = useCallback((config: Partial<BillingConfig>) => {
+    setBillingConfig((prev) => {
+      const updated = { ...prev, ...config };
+      fetch('/api/billing-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      }).catch(console.error);
+      return updated;
+    });
+  }, []);
+
+  const setTheme = useCallback((newTheme: AppTheme) => {
+    setThemeState(newTheme);
+    localStorage.setItem(`${STORAGE_KEY}_theme`, newTheme);
+  }, []);
+
+  // Driver Collection Actions (UNSETTLED DRIVER COLLECTION → Company Settlement)
+  const addDriverCollection = useCallback(
+    (
+      colData: Omit<DriverCollection, 'id' | 'createdAt' | 'collectionId' | 'enteredBy'> & {
+        id?: string;
+        collectionId?: string;
+        enteredBy?: AppUser;
+      }
+    ): DriverCollection => {
+      const year = new Date().getFullYear();
+      const newCol: DriverCollection = {
+        ...colData,
+        id: colData.id || `dc-${Date.now()}`,
+        collectionId:
+          colData.collectionId ||
+          `DC-${year}-${Math.floor(100 + Math.random() * 900)}`,
+        settlementStatus: colData.settlementStatus || 'UNSETTLED',
+        unsettledAmount:
+          colData.unsettledAmount !== undefined ? colData.unsettledAmount : colData.amount,
+        settledAmount: colData.settledAmount || 0,
+        createdAt: new Date().toISOString(),
+        enteredBy: currentUser,
+        quarryId: activeQuarryId,
+      };
+
+      setDriverCollections((prev) => [newCol, ...prev]);
+
+      fetch('/api/driver-collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCol),
+      }).catch(console.error);
+
+      return newCol;
+    },
+    [currentUser, activeQuarryId]
+  );
+
+  const settleDriverCollection = useCallback(
+    (id: string, settledAmount: number, notes?: string) => {
+      setDriverCollections((prev) =>
+        prev.map((col) => {
+          if (col.id === id || col.collectionId === id) {
+            const totalAmt = col.amount;
+            const alreadySettled = col.settledAmount || 0;
+            const newSettled = Math.min(totalAmt, alreadySettled + settledAmount);
+            const unsettled = Math.max(0, totalAmt - newSettled);
+            const status: DriverCollectionSettlementStatus =
+              unsettled === 0 ? 'SETTLED' : 'PARTIALLY SETTLED';
+
+            const updated: DriverCollection = {
+              ...col,
+              settlementStatus: status,
+              settledAmount: newSettled,
+              unsettledAmount: unsettled,
+              settlementDate: getTodayDateString(),
+              settledBy: currentUser,
+              settlementNotes: notes || col.settlementNotes,
+              updatedAt: new Date().toISOString(),
+            };
+
+            fetch(`/api/driver-collections/${col.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            }).catch(console.error);
+
+            // Record settled company cash in QuarryIncome
+            addQuarryIncome({
+              date: getTodayDateString(),
+              category: 'Customer Collections',
+              description: `Driver Collection Settlement from ${col.driver} (${col.customer} — ${col.vehicle})`,
+              amount: settledAmount,
+              paymentMode: (col.paymentMode as PaymentMode) || 'Cash',
+              customerName: col.customer,
+              customerId: col.customerId,
+              enteredBy: currentUser,
+            });
+
+            return updated;
+          }
+          return col;
+        })
+      );
+    },
+    [currentUser, addQuarryIncome]
+  );
+
   return (
     <QuarryContext.Provider
       value={{
         currentUser,
         setCurrentUser,
         authUser,
+        quarries,
+        activeQuarryId,
+        activeQuarry,
+        setActiveQuarryId,
+        addQuarry,
+        updateQuarry,
+        deleteQuarry,
+        addQuarrySection,
+        updateLandOwnerAccount,
+        addLandPayment,
+        branding,
+        updateBranding,
+        billingConfig,
+        updateBillingConfig,
+        theme,
+        setTheme,
+        driverCollections,
+        addDriverCollection,
+        settleDriverCollection,
         vehicles,
         drivers,
         customers,

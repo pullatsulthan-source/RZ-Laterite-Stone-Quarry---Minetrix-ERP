@@ -19,7 +19,8 @@ export const Header: React.FC<HeaderProps> = ({
   activeModule = 'dashboard',
   onSelectModule,
 }) => {
-  const { currentUser, setCurrentUser } = useQuarry();
+  const { currentUser, setCurrentUser, quarries, activeQuarryId, setActiveQuarryId } =
+    useQuarry();
 
   const [timeStr, setTimeStr] = useState('');
   const [dateStr, setDateStr] = useState('');
@@ -132,11 +133,28 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* Right: Operator Switcher (2 Internal Users: Nafid / Aflah) & Quick New Load */}
-      <div className="flex items-center gap-2 sm:gap-4">
+      {/* Right: Quarry Switcher, Operator Switcher (2 Internal Users: Nafid / Aflah) & Quick New Load */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Active Quarry Profile Switcher */}
+        <div className="hidden sm:flex items-center bg-[#13151c] border border-[#262b3a] rounded-xl px-2.5 py-1 gap-1.5 text-xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          <select
+            value={activeQuarryId}
+            onChange={(e) => setActiveQuarryId(e.target.value)}
+            className="bg-transparent text-gray-200 font-bold focus:outline-none cursor-pointer text-xs"
+            title="Switch Active Quarry Profile"
+          >
+            {quarries.map((q) => (
+              <option key={q.id} value={q.id} className="bg-[#13151c] text-white">
+                {q.quarryName} {q.sections.length > 0 ? `(${q.sections.map((s) => s.sectionCode).join('/')})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Direct Active Operator Switcher */}
         <div className="flex items-center bg-[#13151c] border border-[#262b3a] rounded-xl p-1 gap-1">
-          <div className="hidden sm:flex items-center gap-1.5 px-2 text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+          <div className="hidden lg:flex items-center gap-1.5 px-2 text-[10px] uppercase font-bold text-gray-400 tracking-wider">
             <UserCheck className="w-3.5 h-3.5 text-[#d4af37]" />
             <span>Operator:</span>
           </div>

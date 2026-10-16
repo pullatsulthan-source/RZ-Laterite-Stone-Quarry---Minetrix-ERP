@@ -17,11 +17,14 @@ import {
   INITIAL_PAYMENTS,
   INITIAL_ATTENDANCE,
   INITIAL_ADVANCES,
-  INITIAL_STOCK,
   INITIAL_STATEMENTS,
   INITIAL_ROTATIONS,
   INITIAL_VEHICLE_TRANSACTIONS,
   INITIAL_ORDERS,
+  INITIAL_QUARRIES,
+  INITIAL_BRANDING,
+  INITIAL_BILLING_CONFIG,
+  INITIAL_DRIVER_COLLECTIONS,
 } from './src/data/seedData.ts';
 
 dotenv.config();
@@ -59,6 +62,12 @@ interface QuarryDatabase {
   rotations: any[];
   vehicleTransactions: any[];
   orders: any[];
+  quarries: any[];
+  activeQuarryId: string;
+  branding: any;
+  billingConfig: any;
+  theme: string;
+  driverCollections: any[];
 }
 
 function getInitialDatabase(): QuarryDatabase {
@@ -187,6 +196,12 @@ function getInitialDatabase(): QuarryDatabase {
           : 'aflah@racezoneventures.com',
       created_at: s.generatedAt || new Date().toISOString(),
     })),
+    quarries: INITIAL_QUARRIES,
+    activeQuarryId: 'quarry-001',
+    branding: INITIAL_BRANDING,
+    billingConfig: INITIAL_BILLING_CONFIG,
+    theme: 'rz_gold',
+    driverCollections: INITIAL_DRIVER_COLLECTIONS,
   };
 }
 
@@ -206,6 +221,30 @@ function loadDatabase(): QuarryDatabase {
       }
       if (!parsed.orders || !Array.isArray(parsed.orders) || parsed.orders.length === 0) {
         parsed.orders = INITIAL_ORDERS;
+        needsSave = true;
+      }
+      if (!parsed.quarries || !Array.isArray(parsed.quarries) || parsed.quarries.length === 0) {
+        parsed.quarries = INITIAL_QUARRIES;
+        needsSave = true;
+      }
+      if (!parsed.activeQuarryId) {
+        parsed.activeQuarryId = 'quarry-001';
+        needsSave = true;
+      }
+      if (!parsed.branding) {
+        parsed.branding = INITIAL_BRANDING;
+        needsSave = true;
+      }
+      if (!parsed.billingConfig) {
+        parsed.billingConfig = INITIAL_BILLING_CONFIG;
+        needsSave = true;
+      }
+      if (!parsed.theme) {
+        parsed.theme = 'rz_gold';
+        needsSave = true;
+      }
+      if (!parsed.driverCollections || !Array.isArray(parsed.driverCollections) || parsed.driverCollections.length === 0) {
+        parsed.driverCollections = INITIAL_DRIVER_COLLECTIONS;
         needsSave = true;
       }
       if (parsed.vehicles && Array.isArray(parsed.vehicles)) {
@@ -703,6 +742,99 @@ app.put('/api/orders/:id', (req: Request, res: Response) => {
 app.delete('/api/orders/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   db.orders = (db.orders || []).filter((o: any) => o.id !== id && o.orderId !== id);
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+// Multi-Quarry Profiles
+app.get('/api/quarries', (req: Request, res: Response) => {
+  res.json(db.quarries || []);
+});
+
+app.post('/api/quarries', (req: Request, res: Response) => {
+  const quarry = req.body;
+  if (!quarry.id) quarry.id = `quarry-${Date.now()}`;
+  db.quarries = [...(db.quarries || []), quarry];
+  saveDatabase(db);
+  res.json(quarry);
+});
+
+app.put('/api/quarries/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body;
+  db.quarries = (db.quarries || []).map((q: any) => (q.id === id ? { ...q, ...updates } : q));
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+app.delete('/api/quarries/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  db.quarries = (db.quarries || []).filter((q: any) => q.id !== id);
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+app.post('/api/active-quarry', (req: Request, res: Response) => {
+  const { activeQuarryId } = req.body;
+  if (activeQuarryId) {
+    db.activeQuarryId = activeQuarryId;
+    saveDatabase(db);
+  }
+  res.json({ success: true, activeQuarryId: db.activeQuarryId });
+});
+
+// Branding Config
+app.get('/api/branding', (req: Request, res: Response) => {
+  res.json(db.branding || INITIAL_BRANDING);
+});
+
+app.put('/api/branding', (req: Request, res: Response) => {
+  db.branding = { ...db.branding, ...req.body };
+  saveDatabase(db);
+  res.json(db.branding);
+});
+
+// Billing Config
+app.get('/api/billing-config', (req: Request, res: Response) => {
+  res.json(db.billingConfig || INITIAL_BILLING_CONFIG);
+});
+
+app.put('/api/billing-config', (req: Request, res: Response) => {
+  db.billingConfig = { ...db.billingConfig, ...req.body };
+  saveDatabase(db);
+  res.json(db.billingConfig);
+});
+
+// Driver Collections
+app.get('/api/driver-collections', (req: Request, res: Response) => {
+  res.json(db.driverCollections || []);
+});
+
+app.post('/api/driver-collections', (req: Request, res: Response) => {
+  const col = req.body;
+  if (!col.id) col.id = `dc-${Date.now()}`;
+  if (!col.collectionId) {
+    col.collectionId = `DC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+  }
+  col.createdAt = col.createdAt || new Date().toISOString();
+  db.driverCollections = [col, ...(db.driverCollections || [])];
+  saveDatabase(db);
+  res.json(col);
+});
+
+app.put('/api/driver-collections/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body;
+  db.driverCollections = (db.driverCollections || []).map((c: any) =>
+    c.id === id || c.collectionId === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
+  );
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+app.delete('/api/driver-collections/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  db.driverCollections = (db.driverCollections || []).filter((c: any) => c.id !== id && c.collectionId !== id);
   saveDatabase(db);
   res.json({ success: true });
 });

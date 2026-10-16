@@ -17,6 +17,12 @@ import {
   DailyRotationEntry,
   VehicleTransaction,
   StoneOrder,
+  QuarryProfile,
+  QuarrySection,
+  LandOwnerAccount,
+  BrandingConfig,
+  BillingConfig,
+  DriverCollection,
 } from '../types/quarry';
 import { getTodayDateString, getPreviousDateString, getNextDateString } from '../utils/formatters';
 
@@ -2376,5 +2382,182 @@ export const INITIAL_ORDERS: StoneOrder[] = [
   },
 ];
 
+// --------------------------------------------------------------------------
+// MULTI-QUARRY PROFILES & SECTIONS SEED
+// --------------------------------------------------------------------------
 
+export const INITIAL_QUARRIES: QuarryProfile[] = [
+  {
+    id: 'quarry-001',
+    quarryCode: 'RZ-Q001',
+    quarryName: 'RZ Quarry 001',
+    businessName: 'RZ Mining Ventures LLP',
+    address: 'Melattur Road, Near Karakkaparambu, Perinthalmanna, Malappuram, Kerala - 679325',
+    location: 'Perinthalmanna / Melattur Pit',
+    phone: '+91 90484 23530',
+    email: 'operations@racezoneventures.com',
+    gstNumber: '32AAAFR1234A1Z5',
+    taxDetails: 'State Mining Royalty Reg: KL-MPM-Q001',
+    owner: 'Nafid Khan & RZ Ventures',
+    landDetails: '20 Cent Total Quarry Plot — Survey No. 412/3B',
+    contactPerson: 'Nafid Khan (+91 90484 23530)',
+    active: true,
+    notes: 'Primary active laterite quarry site. High-density first-grade stone formation.',
+    sections: [
+      {
+        id: 'sec-q001-a',
+        sectionCode: 'A',
+        name: 'Section A (North Cutting Face)',
+        description: 'First grade deep bench extraction zone',
+        active: true,
+      },
+      {
+        id: 'sec-q001-b',
+        sectionCode: 'B',
+        name: 'Section B (South Quarry Pit)',
+        description: 'Secondary cutting bench & commercial blocks',
+        active: true,
+      },
+    ],
+    landOwnerAccount: {
+      id: 'land-q001',
+      quarryId: 'quarry-001',
+      landOwnerName: 'Hameed Haji',
+      contactPhone: '+91 98470 54321',
+      totalLandCent: 20,
+      initialCuttingAgreementCent: 14,
+      referenceRatePerCent: 140000,
+      referenceAgreementValue: 1960000, // 14 x 1,40,000 = ₹19,60,000
+      remainingCent: 6, // 6 cent has no fixed price yet
+      paidAmount: 400000, // Only actual entered payments
+      balanceAmount: 1560000, // 19,60,000 - 4,00,000
+      outstandingAmount: 1560000,
+      adjustments: 0,
+      notes: 'Initial cutting agreement for 14 cent at ₹1,40,000/cent. Remaining 6 cent price to be negotiated post-initial cut.',
+      documents: ['Agreement_Doc_2026_Q001.pdf', 'Land_Deed_Cent20_Copy.pdf'],
+      payments: [
+        {
+          id: 'lp-001',
+          date: '2026-09-01',
+          amount: 400000,
+          paymentMode: 'Bank',
+          reference: 'NEFT-AXIS-992140',
+          remarks: 'Initial agreement advance token payment via NEFT to land owner Hameed Haji',
+          enteredBy: 'Nafid',
+          createdAt: '2026-09-01T10:30:00Z',
+        },
+      ],
+    },
+  },
+  {
+    id: 'quarry-002',
+    quarryCode: 'RZ-Q002',
+    quarryName: 'RZ Quarry 002',
+    businessName: 'RZ Mining Ventures LLP',
+    address: 'Vettathur Hills, Alanallur Road, Malappuram, Kerala - 679326',
+    location: 'Vettathur Hills Extension',
+    phone: '+91 90484 23530',
+    email: 'operations@racezoneventures.com',
+    gstNumber: '32AAAFR1234A1Z5',
+    taxDetails: 'State Mining Royalty Reg: KL-MPM-Q002',
+    owner: 'RZ Ventures',
+    landDetails: '15 Cent Greenfield Laterite Hill',
+    contactPerson: 'Aflah RZ (+91 98950 12345)',
+    active: true,
+    notes: 'Secondary expansion quarry site for laterite stone cutting.',
+    sections: [
+      {
+        id: 'sec-q002-a',
+        sectionCode: 'A',
+        name: 'Section A (Main Hill Face)',
+        description: 'Initial site preparation & bench development',
+        active: true,
+      },
+    ],
+  },
+];
 
+// --------------------------------------------------------------------------
+// BRANDING & ASSET LIBRARY SEED
+// --------------------------------------------------------------------------
+
+export const INITIAL_BRANDING: BrandingConfig = {
+  brandName: 'RZ MINETRIX',
+  tagline: 'Laterite Stone Quarry & Fleet Operational ERP',
+  quarryLogoUrl: '',
+  rzLogoUrl: '',
+  pnkLogoUrl: '',
+  approvedPnkPersonalImageUrl: '',
+  signatureUrl: '',
+  stampUrl: '',
+  billLogoUrl: '',
+  billWatermarkUrl: '',
+  billBackgroundUrl: '',
+};
+
+// --------------------------------------------------------------------------
+// BILLING CONFIGURATION SEED
+// --------------------------------------------------------------------------
+
+export const INITIAL_BILLING_CONFIG: BillingConfig = {
+  billPrefix: 'RZQ',
+  billNumber: 1001,
+  startingNumber: 1001,
+  billFooter: 'Payment to be settled as per agreed terms. Certified that particulars given above are true and correct.',
+  address: 'RZ Laterite Quarry 001, Melattur Road, Perinthalmanna, Kerala - 679325',
+  phone: '+91 90484 23530 / +91 98950 12345',
+  email: 'operations@racezoneventures.com',
+  gstTaxDetails: 'GSTIN: 32AAAFR1234A1Z5',
+  signature: 'Nafid Khan / Authorized Signatory',
+  stamp: 'RZ MINING VENTURES OFFICIAL SEAL',
+  watermarkText: 'RZ MINETRIX',
+  theme: 'rz_gold',
+};
+
+// --------------------------------------------------------------------------
+// DRIVER PAYMENT COLLECTION SEED
+// --------------------------------------------------------------------------
+
+export const INITIAL_DRIVER_COLLECTIONS: DriverCollection[] = [
+  {
+    id: 'dc-001',
+    collectionId: 'DC-2026-001',
+    orderId: 'ORD-2026-106',
+    driver: 'Kabeer',
+    vehicle: 'KL-55-A-1021',
+    customer: 'Greenfield Villas Project',
+    customerId: 'cust-2',
+    amount: 10750,
+    date: getTodayDateString(),
+    paymentMode: 'Cash',
+    settlementStatus: 'UNSETTLED',
+    unsettledAmount: 10750,
+    settledAmount: 0,
+    remarks: 'Driver Kabeer collected cash at Manjeri Bypass site #4. In transit — pending company settlement handover.',
+    enteredBy: 'Aflah',
+    createdAt: `${getTodayDateString()}T11:20:00Z`,
+    quarryId: 'quarry-001',
+  },
+  {
+    id: 'dc-002',
+    collectionId: 'DC-2026-002',
+    orderId: 'ORD-2026-108',
+    driver: 'Salam',
+    vehicle: 'KL 01 CB 5165',
+    customer: 'Metro Builders & Developers',
+    customerId: 'cust-1',
+    amount: 10000,
+    date: getTodayDateString(),
+    paymentMode: 'UPI',
+    settlementStatus: 'SETTLED',
+    settledAmount: 10000,
+    unsettledAmount: 0,
+    settlementDate: getTodayDateString(),
+    settledBy: 'Nafid',
+    settlementNotes: 'Verified in quarry bank account. Full settlement cleared.',
+    remarks: 'Customer paid driver via GPay on vehicle arrival at Perinthalmanna site.',
+    enteredBy: 'Nafid',
+    createdAt: `${getTodayDateString()}T12:45:00Z`,
+    quarryId: 'quarry-001',
+  },
+];

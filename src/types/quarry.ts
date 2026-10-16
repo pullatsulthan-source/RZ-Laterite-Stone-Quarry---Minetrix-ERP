@@ -10,6 +10,8 @@ export interface GoogleAuthUser {
 }
 
 export interface AuditFields {
+  quarryId?: string; // Multi-quarry data isolation
+  sectionId?: string; // Quarry section (A, B)
   created_by_user_id?: string;
   created_by_name?: string;
   created_by_email?: string;
@@ -620,5 +622,143 @@ export interface SavedStatement extends AuditFields {
   generatedBy: AppUser;
   generatedAt: string;
   termsNotes?: string[];
+}
+
+// --------------------------------------------------------------------------
+// MULTI-QUARRY & BUSINESS PROFILE ARCHITECTURE
+// --------------------------------------------------------------------------
+
+export interface QuarrySection {
+  id: string;
+  sectionCode: string; // 'A', 'B' (Strictly no "Medium"!)
+  name: string; // e.g. 'Section A (North Face)', 'Section B (South Pit)'
+  description?: string;
+  active: boolean;
+}
+
+export interface LandPaymentEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  amount: number;
+  paymentMode: PaymentMode;
+  reference?: string;
+  remarks?: string;
+  enteredBy: AppUser;
+  createdAt: string;
+}
+
+export interface LandOwnerAccount {
+  id: string;
+  quarryId: string;
+  landOwnerName: string;
+  contactPhone?: string;
+  totalLandCent: number; // 20 cent
+  initialCuttingAgreementCent: number; // 14 cent
+  referenceRatePerCent: number; // ₹1,40,000 per cent
+  referenceAgreementValue: number; // 14 * 140,000 = ₹19,60,000
+  remainingCent: number; // 6 cent (no fixed price yet)
+  paidAmount: number; // ONLY actual entered payments
+  balanceAmount: number; // agreementValue - paidAmount
+  outstandingAmount: number;
+  adjustments: number;
+  notes: string;
+  documents: string[]; // document / photo URLs or names
+  payments: LandPaymentEntry[];
+}
+
+export interface QuarryProfile extends AuditFields {
+  id: string; // e.g. 'quarry-001'
+  quarryCode: string; // 'RZ-Q001'
+  quarryName: string; // 'RZ Quarry 001'
+  businessName: string; // 'RZ Mining & Laterite Ventures'
+  address: string;
+  location: string; // 'Perinthalmanna / Melattur'
+  phone: string;
+  email: string;
+  gstNumber?: string;
+  taxDetails?: string;
+  owner: string; // 'RZ Ventures / Nafid Khan'
+  landDetails?: string;
+  contactPerson?: string;
+  active: boolean;
+  notes?: string;
+  sections: QuarrySection[];
+  landOwnerAccount?: LandOwnerAccount;
+}
+
+// --------------------------------------------------------------------------
+// BRANDING & ASSET CONFIGURATION
+// --------------------------------------------------------------------------
+
+export interface BrandingConfig {
+  quarryLogoUrl?: string;
+  rzLogoUrl?: string;
+  pnkLogoUrl?: string;
+  approvedPnkPersonalImageUrl?: string;
+  signatureUrl?: string;
+  stampUrl?: string;
+  billLogoUrl?: string;
+  billWatermarkUrl?: string;
+  billBackgroundUrl?: string;
+  brandName: string;
+  tagline: string;
+}
+
+// --------------------------------------------------------------------------
+// BILLING CONFIGURATION
+// --------------------------------------------------------------------------
+
+export interface BillingConfig {
+  billPrefix: string;
+  billNumber: number;
+  startingNumber: number;
+  billFooter: string;
+  address: string;
+  phone: string;
+  email: string;
+  gstTaxDetails: string;
+  signature: string;
+  stamp: string;
+  watermarkText: string;
+  theme: string;
+}
+
+export type AppTheme = 'rz_gold' | 'pnk_gold' | 'corporate' | 'industrial' | 'minimal';
+
+// --------------------------------------------------------------------------
+// DRIVER PAYMENT COLLECTION
+// --------------------------------------------------------------------------
+
+export type PaymentCollectionMode =
+  | 'CUSTOMER DIRECT'
+  | 'DRIVER COLLECTION'
+  | 'ORDERMAN COLLECTION'
+  | 'OFFICE COLLECTION'
+  | 'BANK TRANSFER';
+
+export type DriverCollectionSettlementStatus = 'UNSETTLED' | 'PARTIALLY SETTLED' | 'SETTLED';
+
+export interface DriverCollection extends AuditFields {
+  id: string;
+  collectionId: string; // e.g. DC-2026-001
+  orderId: string; // e.g. ORD-2026-101
+  driver: string;
+  driverId?: string;
+  vehicle: string;
+  customer: string;
+  customerId?: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  paymentMode: PaymentMode | string;
+  settlementStatus: DriverCollectionSettlementStatus;
+  settledAmount?: number;
+  unsettledAmount?: number;
+  settlementDate?: string;
+  settlementNotes?: string;
+  settledBy?: string;
+  remarks?: string;
+  enteredBy: AppUser;
+  createdAt: string;
+  updatedAt?: string;
 }
 

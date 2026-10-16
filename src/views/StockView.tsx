@@ -1,17 +1,24 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useQuarry } from '../context/QuarryContext';
 import { MaterialType } from '../types/quarry';
-import { formatNumber } from '../utils/formatters';
-import { Boxes, Plus, Minus, SlidersHorizontal, PackageCheck, Truck, CheckCircle2, X } from 'lucide-react';
-import { INITIAL_STOCK } from '../data/seedData';
+import { formatNumber, getTodayDateString } from '../utils/formatters';
+import {
+  Boxes,
+  ArrowRight,
+  PackageCheck,
+  Truck,
+  CheckCircle2,
+  ShieldCheck,
+  Award,
+  Layers,
+  Repeat,
+  Info,
+} from 'lucide-react';
 
 export const StockView: React.FC = () => {
-  const { stock, production, gatePasses, stockAdjustments, adjustStock, currentUser } = useQuarry();
+  const { production, gatePasses, loads, activeQuarry } = useQuarry();
 
-  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
-  const [selectedMat, setSelectedMat] = useState<MaterialType>('Laterite Stone — 1st');
-  const [adjustQty, setAdjustQty] = useState<number>(0);
-  const [adjustReason, setAdjustReason] = useState('');
+  const today = getTodayDateString();
 
   const materials: MaterialType[] = [
     'Laterite Stone — 1st',
@@ -19,58 +26,122 @@ export const StockView: React.FC = () => {
     'Laterite Stone — 3rd',
   ];
 
-  const handleAdjustSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adjustQty || !adjustReason) return;
-    adjustStock(selectedMat, Number(adjustQty), adjustReason);
-    setAdjustModalOpen(false);
-    setAdjustQty(0);
-    setAdjustReason('');
-  };
-
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="p-4 rounded-2xl bg-[#12141a] border border-[#232736] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Boxes className="w-5 h-5 text-[#d4af37]" />
-            <h2 className="text-xl font-bold font-cinzel text-gray-100">
-              Quarry Stock Management
-            </h2>
+    <div className="space-y-6">
+      {/* Header Banner */}
+      <div className="p-5 rounded-3xl bg-gradient-to-r from-[#141824] via-[#10131c] to-[#121520] border border-[#d4af37]/40 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-full bg-[#d4af37]/5 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-[#d4af37]/20 border border-[#d4af37]/40 text-[#f3c64c]">
+                <Truck className="w-5 h-5 stroke-[2.5]" />
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black font-cinzel text-gray-100 tracking-wide">
+                Direct Pit Loading & Throughput Flow
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-950/70 text-amber-300 border border-amber-700/50">
+                Zero Physical Closing Stock
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-2 max-w-3xl leading-relaxed">
+              <span className="text-[#f3c64c] font-semibold">RZ MINETRIX Operational Rule:</span>{' '}
+              There is NO physical closing stock or warehouse in the quarry. Production is cut directly from pit faces and loaded immediately onto assigned vehicles.
+            </p>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Strict formula: Opening + Production + Adjustments - Confirmed Dispatched Gate Passes = Closing Stock
-          </p>
+
+          <div className="flex items-center gap-2 bg-[#090b10] border border-[#22283a] px-3.5 py-2 rounded-2xl">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+            <div className="text-xs">
+              <span className="text-gray-400 block text-[10px] uppercase font-bold">Active Site</span>
+              <span className="text-gray-200 font-bold">{activeQuarry.quarryName}</span>
+            </div>
+          </div>
         </div>
 
-        <button
-          onClick={() => setAdjustModalOpen(true)}
-          className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#1e2332] hover:bg-[#282f42] text-[#d4af37] border border-[#d4af37]/40 flex items-center gap-1.5 shadow"
-        >
-          <SlidersHorizontal className="w-4 h-4" />
-          <span>Manual Stock Adjustment</span>
-        </button>
+        {/* 4-Stage Quarry Operational Flow Visualizer */}
+        <div className="mt-5 pt-4 border-t border-[#1e2436]">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-2.5 flex items-center gap-2">
+            <Repeat className="w-3.5 h-3.5 text-[#d4af37]" />
+            <span>Official Quarry Extraction Pipeline</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
+              <span className="w-7 h-7 rounded-lg bg-emerald-950/70 border border-emerald-700/50 text-emerald-400 font-black text-xs flex items-center justify-center shrink-0">
+                1
+              </span>
+              <div>
+                <span className="text-xs font-bold text-gray-200 block">PRODUCTION</span>
+                <span className="text-[10px] text-gray-400">Excavator cutting bench extraction</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
+              <span className="w-7 h-7 rounded-lg bg-sky-950/70 border border-sky-700/50 text-sky-400 font-black text-xs flex items-center justify-center shrink-0">
+                2
+              </span>
+              <div>
+                <span className="text-xs font-bold text-gray-200 block">QUALITY IDENTIFICATION</span>
+                <span className="text-[10px] text-gray-400">1st Grade, 2nd Grade, Rubble Load</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
+              <span className="w-7 h-7 rounded-lg bg-amber-950/70 border border-amber-700/50 text-amber-400 font-black text-xs flex items-center justify-center shrink-0">
+                3
+              </span>
+              <div>
+                <span className="text-xs font-bold text-gray-200 block">DIRECT VEHICLE LOADING</span>
+                <span className="text-[10px] text-gray-400">Straight into tipper body (250 pcs)</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
+              <span className="w-7 h-7 rounded-lg bg-purple-950/70 border border-purple-700/50 text-purple-400 font-black text-xs flex items-center justify-center shrink-0">
+                4
+              </span>
+              <div>
+                <span className="text-xs font-bold text-gray-200 block">OUTWARD GATE PASS</span>
+                <span className="text-[10px] text-gray-400">Verified & dispatched on road</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Stock Cards for the 3 Materials */}
+      {/* Production vs Direct Dispatch Cards per Quality Grade */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {materials.map((mat) => {
           const is3rd = mat === 'Laterite Stone — 3rd';
           const unit = is3rd ? 'loads' : 'pcs';
 
-          const opening = INITIAL_STOCK[mat];
+          // Historical production preserved for analysis
           const totalProd = production
             .filter((p) => p.material === mat)
             .reduce((sum, p) => sum + p.quantity, 0);
+
+          // Today's cut
+          const todayProd = production
+            .filter((p) => p.material === mat && p.date === today)
+            .reduce((sum, p) => sum + p.quantity, 0);
+
+          // Total Dispatched via Gate Passes
           const totalDispatched = gatePasses
             .filter((g) => g.material === mat)
             .reduce((sum, g) => sum + g.quantity, 0);
-          const totalAdj = stockAdjustments
-            .filter((a) => a.material === mat)
-            .reduce((sum, a) => sum + a.quantity, 0);
 
-          const currentAvailable = stock[mat];
+          // Today's Dispatched
+          const todayDispatched = gatePasses
+            .filter((g) => g.material === mat && g.date === today)
+            .reduce((sum, g) => sum + g.quantity, 0);
+
+          // Vehicles currently loading this stone
+          const loadingLoads = loads.filter(
+            (l) => l.material === mat && (l.status === 'Draft' || l.status === 'Loaded')
+          );
+          const currentInLoading = loadingLoads.reduce((sum, l) => sum + l.quantity, 0);
 
           return (
             <div
@@ -81,183 +152,71 @@ export const StockView: React.FC = () => {
                 <div>
                   <h3 className="font-cinzel font-bold text-base text-gray-100">{mat}</h3>
                   <span className="text-[10px] text-[#d4af37] font-semibold uppercase tracking-wider">
-                    {is3rd ? 'Rubble Load Material' : 'Standard 250 pcs / Load'}
+                    {is3rd ? 'Rubble Load Material' : 'Standard 250 pcs / Tipper'}
                   </span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  Active Pit
+                  Live Extraction
                 </span>
               </div>
 
-              {/* Big Available Number */}
+              {/* Active Pit Loading Status */}
               <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] text-center">
                 <div className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">
-                  Available Closing Stock
+                  Today's Pit Loading & Dispatch
                 </div>
-                <div className="text-3xl font-black font-mono text-[#f3c64c] my-1">
-                  {formatNumber(currentAvailable)}{' '}
-                  <span className="text-sm font-normal text-gray-400">{unit}</span>
+                <div className="text-2xl font-black font-mono text-[#f3c64c] my-1">
+                  {formatNumber(todayDispatched)}{' '}
+                  <span className="text-xs font-normal text-gray-400">{unit} dispatched</span>
                 </div>
-                <div className="text-[11px] text-gray-500">
-                  Ready for loading & gate dispatch
+                <div className="text-[11px] text-gray-400 flex items-center justify-center gap-1.5 mt-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                  <span>
+                    Currently in Pit Loading:{' '}
+                    <b className="text-white font-mono">{formatNumber(currentInLoading)} {unit}</b> ({loadingLoads.length} tippers)
+                  </span>
                 </div>
               </div>
 
-              {/* Exact Formula Breakdown */}
-              <div className="space-y-1.5 text-xs">
+              {/* Operational Ledger Breakdown */}
+              <div className="space-y-2 text-xs">
                 <div className="flex justify-between py-1 border-b border-[#1c202d] text-gray-400">
-                  <span>Opening Baseline:</span>
-                  <span className="font-mono text-gray-200">{formatNumber(opening)} {unit}</span>
+                  <span>Today Pit Extraction:</span>
+                  <span className="font-mono text-emerald-400 font-bold">
+                    +{formatNumber(todayProd)} {unit}
+                  </span>
                 </div>
-                <div className="flex justify-between py-1 border-b border-[#1c202d] text-emerald-400">
-                  <span>(+) Production Added:</span>
-                  <span className="font-mono font-bold">+{formatNumber(totalProd)} {unit}</span>
+                <div className="flex justify-between py-1 border-b border-[#1c202d] text-gray-400">
+                  <span>Today Gate Pass Dispatches:</span>
+                  <span className="font-mono text-rose-400 font-bold">
+                    -{formatNumber(todayDispatched)} {unit}
+                  </span>
                 </div>
-                <div className="flex justify-between py-1 border-b border-[#1c202d] text-rose-400">
-                  <span>(-) Confirmed Dispatched (GP):</span>
-                  <span className="font-mono font-bold">-{formatNumber(totalDispatched)} {unit}</span>
+                <div className="flex justify-between py-1 border-b border-[#1c202d] text-gray-400">
+                  <span>All-Time Production History:</span>
+                  <span className="font-mono text-gray-200 font-semibold">
+                    {formatNumber(totalProd)} {unit}
+                  </span>
                 </div>
-                {totalAdj !== 0 && (
-                  <div className="flex justify-between py-1 border-b border-[#1c202d] text-blue-400">
-                    <span>(±) Stock Adjustments:</span>
-                    <span className="font-mono font-bold">
-                      {totalAdj > 0 ? `+${totalAdj}` : totalAdj} {unit}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between py-1 text-gray-400">
+                  <span>All-Time Dispatched Volume:</span>
+                  <span className="font-mono text-gray-200 font-semibold">
+                    {formatNumber(totalDispatched)} {unit}
+                  </span>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Manual Stock Adjustment History Table */}
-      <div className="bg-[#12141a] rounded-2xl border border-[#232736] p-4 space-y-3">
-        <h3 className="font-cinzel font-bold text-sm text-gray-200">
-          Stock Adjustments Audit Trail
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-[#161924] border-b border-[#232736] text-gray-400 text-[11px]">
-                <th className="p-2.5">Date</th>
-                <th className="p-2.5">Material</th>
-                <th className="p-2.5 text-right">Adjustment Quantity</th>
-                <th className="p-2.5">Reason / Justification</th>
-                <th className="p-2.5 text-center">Adjusted By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1e2230]">
-              {stockAdjustments.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-6 text-center text-gray-500">
-                    No manual adjustments made. System stock strictly reconciled from production and gate passes.
-                  </td>
-                </tr>
-              ) : (
-                stockAdjustments.map((a) => (
-                  <tr key={a.id} className="hover:bg-[#161924]">
-                    <td className="p-2.5 font-mono text-gray-300">{a.date}</td>
-                    <td className="p-2.5 font-bold text-gray-200">{a.material}</td>
-                    <td className="p-2.5 text-right font-mono font-bold">
-                      <span className={a.quantity > 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                        {a.quantity > 0 ? `+${a.quantity}` : a.quantity}
-                      </span>
-                    </td>
-                    <td className="p-2.5 text-gray-300">{a.reason}</td>
-                    <td className="p-2.5 text-center font-bold text-gray-300">{a.enteredBy}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Direct Pit Operations Notice */}
+      <div className="p-4 rounded-2xl bg-[#0d1017] border border-[#232736] flex items-center gap-3 text-xs text-gray-400">
+        <Info className="w-5 h-5 text-[#d4af37] shrink-0" />
+        <span>
+          <b className="text-gray-200">Zero-Warehousing Principle:</b> Quarry blocks are cut to order and direct-loaded into vehicles. No carry-forward warehouse stock is maintained. All records represent live excavation throughput and outward gate passes.
+        </span>
       </div>
-
-      {/* Adjustment Modal */}
-      {adjustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#101218] border border-[#262c3e] w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-[#262c3e]">
-              <h3 className="font-cinzel font-bold text-base text-gray-100">
-                Record Stock Adjustment
-              </h3>
-              <button
-                onClick={() => setAdjustModalOpen(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAdjustSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Material Quality *
-                </label>
-                <select
-                  value={selectedMat}
-                  onChange={(e) => setSelectedMat(e.target.value as MaterialType)}
-                  className="w-full bg-[#161924] border border-[#262c3e] rounded-xl px-3 py-2 text-xs text-gray-100"
-                >
-                  {materials.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Quantity Adjustment (positive or negative) *
-                </label>
-                <input
-                  type="number"
-                  value={adjustQty}
-                  onChange={(e) => setAdjustQty(Number(e.target.value) || 0)}
-                  placeholder="e.g. +200 or -50"
-                  className="w-full bg-[#161924] border border-[#262c3e] rounded-xl px-3 py-2 text-xs font-mono font-bold text-gray-100"
-                  required
-                />
-                <span className="text-[10px] text-gray-400 mt-1 block">
-                  Positive value adds to stock, negative value deducts for breakage/wastage.
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Reason for Adjustment *
-                </label>
-                <input
-                  type="text"
-                  value={adjustReason}
-                  onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="e.g. Broken blocks during sorting or physical audit reconciliation"
-                  className="w-full bg-[#161924] border border-[#262c3e] rounded-xl px-3 py-2 text-xs text-gray-100"
-                  required
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAdjustModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="gold-btn px-5 py-2 rounded-xl text-xs font-bold"
-                >
-                  Apply Adjustment
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
