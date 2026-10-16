@@ -112,9 +112,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'quality', label: 'Quality & Grades', icon: Award },
         {
           id: 'stock',
-          label: 'Stock & Inventory',
+          label: 'Direct Pit Throughput',
           icon: Boxes,
-          badge: `${(totalStockBlocks / 1000).toFixed(1)}k`,
         },
         {
           id: 'gate_pass',

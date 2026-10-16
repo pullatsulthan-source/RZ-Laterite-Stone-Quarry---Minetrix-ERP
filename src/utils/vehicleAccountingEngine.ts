@@ -125,7 +125,8 @@ export function computeVehicleAccount(
     (l) => l.vehicleNumber.trim().toUpperCase() === vNum
   );
   const totalTrips = vehicleLoads.length;
-  const totalStoneQty = vehicleLoads.reduce((sum, l) => sum + (l.quantity || 0), 0);
+  // Vehicle side uses the actual received quantity entered by operator (stored independently from quarry rated qty)
+  const totalStoneQty = vehicleLoads.reduce((sum, l) => sum + (l.vehicleReceivedQuantity || l.quantity || 0), 0);
 
   return {
     vehicleId: vehicle.id,

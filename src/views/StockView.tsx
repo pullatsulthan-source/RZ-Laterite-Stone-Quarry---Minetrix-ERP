@@ -60,52 +60,75 @@ export const StockView: React.FC = () => {
           </div>
         </div>
 
-        {/* 4-Stage Quarry Operational Flow Visualizer */}
+        {/* 6-Stage Quarry Operational Pipeline Visualizer */}
         <div className="mt-5 pt-4 border-t border-[#1e2436]">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-2.5 flex items-center gap-2">
-            <Repeat className="w-3.5 h-3.5 text-[#d4af37]" />
-            <span>Official Quarry Extraction Pipeline</span>
+          <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Repeat className="w-3.5 h-3.5 text-[#d4af37]" />
+              <span>Official 6-Stage Quarry Production & Dispatch Pipeline</span>
+            </div>
+            <span className="text-[10px] text-amber-400 font-mono">No Warehouse • Direct Vehicle Loading</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
-              <span className="w-7 h-7 rounded-lg bg-emerald-950/70 border border-emerald-700/50 text-emerald-400 font-black text-xs flex items-center justify-center shrink-0">
-                1
-              </span>
-              <div>
-                <span className="text-xs font-bold text-gray-200 block">PRODUCTION</span>
-                <span className="text-[10px] text-gray-400">Excavator cutting bench extraction</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="p-2.5 rounded-xl bg-[#0b0d13] border border-[#202535] space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded bg-emerald-950/70 border border-emerald-700/50 text-emerald-400 font-black text-[10px] flex items-center justify-center">
+                  1
+                </span>
+                <span className="text-[11px] font-bold text-gray-200">CUTTING</span>
               </div>
+              <span className="text-[9px] text-gray-400 block">13.5 x 8.5 x 9 inch cut</span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
-              <span className="w-7 h-7 rounded-lg bg-sky-950/70 border border-sky-700/50 text-sky-400 font-black text-xs flex items-center justify-center shrink-0">
-                2
-              </span>
-              <div>
-                <span className="text-xs font-bold text-gray-200 block">QUALITY IDENTIFICATION</span>
-                <span className="text-[10px] text-gray-400">1st Grade, 2nd Grade, Rubble Load</span>
+            <div className="p-2.5 rounded-xl bg-[#0b0d13] border border-[#202535] space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded bg-sky-950/70 border border-sky-700/50 text-sky-400 font-black text-[10px] flex items-center justify-center">
+                  2
+                </span>
+                <span className="text-[11px] font-bold text-gray-200">SPLITTING</span>
               </div>
+              <span className="text-[9px] text-gray-400 block">13 x 8 x 8 inch finished</span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
-              <span className="w-7 h-7 rounded-lg bg-amber-950/70 border border-amber-700/50 text-amber-400 font-black text-xs flex items-center justify-center shrink-0">
-                3
-              </span>
-              <div>
-                <span className="text-xs font-bold text-gray-200 block">DIRECT VEHICLE LOADING</span>
-                <span className="text-[10px] text-gray-400">Straight into tipper body (250 pcs)</span>
+            <div className="p-2.5 rounded-xl bg-[#0b0d13] border border-[#202535] space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded bg-indigo-950/70 border border-indigo-700/50 text-indigo-400 font-black text-[10px] flex items-center justify-center">
+                  3
+                </span>
+                <span className="text-[11px] font-bold text-gray-200">QUALITY ID</span>
               </div>
+              <span className="text-[9px] text-gray-400 block">1st, 2nd, Latt, Mury</span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#0b0d13] border border-[#202535] flex items-center gap-3">
-              <span className="w-7 h-7 rounded-lg bg-purple-950/70 border border-purple-700/50 text-purple-400 font-black text-xs flex items-center justify-center shrink-0">
-                4
-              </span>
-              <div>
-                <span className="text-xs font-bold text-gray-200 block">OUTWARD GATE PASS</span>
-                <span className="text-[10px] text-gray-400">Verified & dispatched on road</span>
+            <div className="p-2.5 rounded-xl bg-[#0b0d13] border border-[#202535] space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded bg-amber-950/70 border border-amber-700/50 text-amber-400 font-black text-[10px] flex items-center justify-center">
+                  4
+                </span>
+                <span className="text-[11px] font-bold text-gray-200">DIRECT LOAD</span>
               </div>
+              <span className="text-[9px] text-gray-400 block">260 physical / 255 rated</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-[#0b0d13] border border-[#202535] space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded bg-purple-950/70 border border-purple-700/50 text-purple-400 font-black text-[10px] flex items-center justify-center">
+                  5
+                </span>
+                <span className="text-[11px] font-bold text-gray-200">GATE PASS</span>
+              </div>
+              <span className="text-[9px] text-gray-400 block">Outward pass verified</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-[#0b0d13] border border-[#202535] space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded bg-rose-950/70 border border-rose-700/50 text-rose-400 font-black text-[10px] flex items-center justify-center">
+                  6
+                </span>
+                <span className="text-[11px] font-bold text-gray-200">DISPATCH</span>
+              </div>
+              <span className="text-[9px] text-gray-400 block">Direct site transit</span>
             </div>
           </div>
         </div>
@@ -208,6 +231,46 @@ export const StockView: React.FC = () => {
             </div>
           );
         })}
+      </div>
+
+      {/* 6 Permanent Operational Analysis Registers (Prompt 2 Requirement) */}
+      <div className="p-4 rounded-2xl bg-[#121520] border border-[#23283a] space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Award className="w-4 h-4 text-[#d4af37]" />
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-200">
+              Permanent Analytical Registers (No Stock Balances Maintained)
+            </span>
+          </div>
+          <span className="text-[10px] text-gray-400 font-mono">Available for all historical shifts</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+          <div className="p-2.5 rounded-xl bg-[#0a0c10] border border-[#1e2334]">
+            <span className="text-[10px] uppercase font-bold text-sky-400 block">1. Daily Analysis</span>
+            <span className="text-[11px] text-gray-300">Bench extraction, weather, heat, moisture</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-[#0a0c10] border border-[#1e2334]">
+            <span className="text-[10px] uppercase font-bold text-[#f3c64c] block">2. Quality Analysis</span>
+            <span className="text-[11px] text-gray-300">1st 8-corner %, 2nd %, Latt %, Mury %</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-[#0a0c10] border border-[#1e2334]">
+            <span className="text-[10px] uppercase font-bold text-emerald-400 block">3. Recovery Analysis</span>
+            <span className="text-[11px] text-gray-300">Finished / Cut ratio (strictly no guessing)</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-[#0a0c10] border border-[#1e2334]">
+            <span className="text-[10px] uppercase font-bold text-purple-400 block">4. Machine Analysis</span>
+            <span className="text-[11px] text-gray-300">Double-blade track cutters & hours</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-[#0a0c10] border border-[#1e2334]">
+            <span className="text-[10px] uppercase font-bold text-amber-400 block">5. Labour Analysis</span>
+            <span className="text-[11px] text-gray-300">Lead operators, assistants & splitters</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-[#0a0c10] border border-[#1e2334]">
+            <span className="text-[10px] uppercase font-bold text-rose-400 block">6. Historical Reports</span>
+            <span className="text-[11px] text-gray-300">Chronological pit records & gate passes</span>
+          </div>
+        </div>
       </div>
 
       {/* Direct Pit Operations Notice */}

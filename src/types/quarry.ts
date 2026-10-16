@@ -172,11 +172,28 @@ export interface StaffPayroll extends AuditFields {
   remarks?: string;
 }
 
+export type RateCondition = 'Standard Rock' | 'Weaker Rock';
+
+export type OperationalQuality = '1ST QUALITY' | '2ND QUALITY' | '3RD / LATT' | 'MURY';
+
 export interface RateConfig {
   quarryRates: {
     'Laterite Stone — 1st': { unit: 'pc'; standardQty: number; ratePerUnit: number; totalPerLoad: number };
     'Laterite Stone — 2nd': { unit: 'pc'; standardQty: number; ratePerUnit: number; totalPerLoad: number };
     'Laterite Stone — 3rd': { unit: 'load'; standardQty: number; ratePerUnit: number; totalPerLoad: number };
+  };
+  // Weaker-Rock condition rates (Section B / Weaker Rock): 1st: ₹41, 2nd: ₹31, Mury: ₹1,000, Latt: ₹2,500
+  weakerRockRates: {
+    'Laterite Stone — 1st': { unit: 'pc'; standardQty: number; ratePerUnit: number; totalPerLoad: number };
+    'Laterite Stone — 2nd': { unit: 'pc'; standardQty: number; ratePerUnit: number; totalPerLoad: number };
+    'Laterite Stone — 3rd': { unit: 'load'; standardQty: number; ratePerUnit: number; totalPerLoad: number };
+  };
+  muryLoadRate: number; // ₹1,000 / load
+  lattLoadRate: number; // ₹2,500 / load
+  loadFormula: {
+    physicalQuantity: number; // 260 pieces
+    freeQuantity: number; // 5 pieces
+    ratedQuantity: number; // 255 pieces
   };
   rzCustomerRates: {
     'Laterite Stone — 1st': { unit: 'pc'; standardQty: number; ratePerUnit: number; totalPerLoad: number };
@@ -212,9 +229,19 @@ export interface LoadOrder extends AuditFields {
   quantity: number;
   unit: 'pcs' | 'load';
   
+  // 260 Physical + 5 Free + 255 Rated Model
+  physicalQuantity?: number; // e.g. 260
+  freeQuantity?: number; // e.g. 5
+  ratedQuantity?: number; // e.g. 255
+  vehicleReceivedQuantity?: number; // Stored independently from quarry rated qty (e.g. 260 or 250)
+  rateCondition?: RateCondition; // 'Standard Rock' or 'Weaker Rock'
+  quarrySection?: string; // 'Section A' or 'Section B'
+  gapPosition?: number; // 1, 2, 3, 4
+  roundNumber?: number;
+
   // Quarry Rates & Totals
-  quarryRate: number; // per pc or per load
-  quarryAmount: number; // 250 * 43 = 10,750
+  quarryRate: number; // per pc or per load (43 for Standard 1st, 41 for Weaker 1st, etc.)
+  quarryAmount: number; // 255 * rate (or load rate)
 
   // Customer Sale Rates (applicable for RZ Mining or direct billed)
   customerSaleRate: number; // e.g. 65 for 1st
@@ -526,6 +553,129 @@ export interface ProductionEntry extends AuditFields {
   createdAt: string;
 }
 
+// --------------------------------------------------------------------------
+// RZ MINETRIX — QUARRY PRODUCTION & RECOVERY ENGINE
+// --------------------------------------------------------------------------
+
+export interface QuarryDailyProductionRecord extends AuditFields {
+  id: string;
+  productionId: string; // e.g. PRD-2026-001
+  date: string; // YYYY-MM-DD
+  quarryId: string;
+  quarryName: string; // e.g. RZ Quarry 001
+  section: string; // 'Section A' (top rock) or 'Section B' (weaker rock). Strictly NO "Medium"
+  cuttingMachine: string; // e.g. 'Cutting Machine #1'
+  operator: string;
+  assistantOperator?: string;
+  helpers?: string; // Count or worker names
+  startTime?: string;
+  endTime?: string;
+  workingHours?: number;
+
+  // Geological / Environmental Working Conditions
+  soilCondition: string; // e.g. 'Dry / Compact', 'Moist', 'Hard overburden'
+  rockStrength: string; // 'Hard / Top-Rock', 'Medium-Hard', 'Soft / Weaker-Rock'
+  moisture: string; // 'Low', 'Moderate', 'High'
+  heat: string; // 'Normal', 'Moderate', 'High'
+  cuttingCondition: string; // 'Smooth', 'Blade wear high', 'Fractured'
+  splittingCondition: string; // 'Clean split', 'Chipping', 'Uneven break'
+  cuttingNotes?: string;
+
+  // Operational Cutting Dimensions reference
+  cuttingDimensions?: string; // '13.5 x 8.5 x 9 inch'
+  finishedDimensions?: string; // '13 x 8 x 8 inch'
+
+  // Actual Quantities (recorded AFTER rock is split, never forced before)
+  totalCutQuantity: number; // Raw stone cut
+  finishedQuantity: number; // Finished usable stones
+  firstQualityQuantity: number; // 1st Quality (All 8 corners intact)
+  secondQualityQuantity: number; // 2nd Quality (~3/4 corners)
+  lattQuantity: number; // Latt / 3rd Number (defective/damaged)
+  muryQuantity: number; // Mury (split/broken into rubble)
+  unit: 'pcs' | 'load';
+
+  // Recovery & Quality Analysis (Percentages show 'N/A' when denominator is missing)
+  recoveryRate?: number | null; // (finished / cut) * 100
+  firstQualityRate?: number | null; // (1st / finished) * 100
+  secondQualityRate?: number | null; // (2nd / finished) * 100
+  lattRate?: number | null; // (latt / finished) * 100
+  muryRate?: number | null; // (mury / cut) * 100
+
+  // Direct Vehicle Loading association
+  allocatedVehicle?: string;
+  gapPosition?: number; // Gap 1, 2, 3, 4
+
+  remarks?: string;
+  photos?: string[];
+  enteredBy: AppUser;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// --------------------------------------------------------------------------
+// RZ MINETRIX — DAILY GAP SYSTEM & ROTATION ENGINE
+// 4-Gap physical vehicle queue: 1st Gap (1st Quality), 2nd Gap (2nd Quality),
+// 3rd Gap (Mury), 4th Gap (Any available).
+// Quality flexibility cascading: 1st Gap -> 2nd Gap -> 3rd Gap -> 4th Gap.
+// RZ MINING vehicle is FIXED at Position 1.
+// --------------------------------------------------------------------------
+
+export type GapSlotNumber = 1 | 2 | 3 | 4;
+
+export interface GapVehicleQueueItem {
+  id: string;
+  gapNumber: GapSlotNumber; // 1st, 2nd, 3rd, 4th Gap
+  vehicleNumber: string;
+  vehicleId: string;
+  driver: string;
+  owner: string;
+  category: VehicleCategory;
+  defaultExpectedQuality: '1ST QUALITY' | '2ND QUALITY' | 'MURY' | 'ANY AVAILABLE';
+  currentStatus: 'Waiting' | 'Offered' | 'Loading' | 'Loaded' | 'Dispatched' | 'Returned';
+  entryTime: string;
+  roundNumber: number;
+  isFixedCompanyVehicle: boolean; // TRUE for RZ MINING
+  notes?: string;
+}
+
+export interface GapOfferEvent {
+  id: string;
+  timestamp: string;
+  roundNumber: number;
+  productionRecordId?: string;
+  offeredQuality: '1ST QUALITY' | '2ND QUALITY' | 'LATT / 3RD' | 'MURY';
+  offeredToGap: GapSlotNumber;
+  vehicleNumber: string;
+  driver: string;
+  action: 'Accepted' | 'Rejected';
+  rejectionReason?: string;
+  nextOfferedGap?: GapSlotNumber | null;
+  recordedBy: AppUser;
+}
+
+export interface QuarryRoundLog {
+  id: string;
+  roundNumber: number;
+  date: string;
+  vehicleNumber: string;
+  driver: string;
+  originalGap: GapSlotNumber;
+  actualGapUsed: GapSlotNumber;
+  offeredQuality: string;
+  acceptedQuality: string;
+  physicalQty: number; // 260
+  freeQty: number; // 5
+  ratedQty: number; // 255
+  vehicleReceivedQty: number; // Actual received quantity stored independently
+  loadingStart: string;
+  loadingCompletion: string;
+  departureTime: string;
+  returnTime?: string;
+  nextEligiblePosition?: number; // Determined by actual return time
+  status: 'Loading' | 'Dispatched' | 'Delivered' | 'Returned';
+  remarks?: string;
+}
+
 export interface StockAdjustment extends AuditFields {
   id: string;
   date: string;
@@ -654,9 +804,12 @@ export interface LandOwnerAccount {
   contactPhone?: string;
   totalLandCent: number; // 20 cent
   initialCuttingAgreementCent: number; // 14 cent
+  cuttingAreaCent?: number; // 14 cent
+  agreementAreaCent?: number; // 14 cent
   referenceRatePerCent: number; // ₹1,40,000 per cent
   referenceAgreementValue: number; // 14 * 140,000 = ₹19,60,000
   remainingCent: number; // 6 cent (no fixed price yet)
+  undeterminedAreaCent?: number; // 6 cent
   paidAmount: number; // ONLY actual entered payments
   balanceAmount: number; // agreementValue - paidAmount
   outstandingAmount: number;

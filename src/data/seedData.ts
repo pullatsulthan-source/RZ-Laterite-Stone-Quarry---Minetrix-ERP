@@ -7,6 +7,10 @@ import {
   LoadOrder,
   GatePass,
   ProductionEntry,
+  QuarryDailyProductionRecord,
+  GapVehicleQueueItem,
+  GapOfferEvent,
+  QuarryRoundLog,
   QuarryIncome,
   QuarryExpense,
   CustomerPayment,
@@ -30,15 +34,15 @@ export const INITIAL_RATES: RateConfig = {
   quarryRates: {
     'Laterite Stone — 1st': {
       unit: 'pc',
-      standardQty: 250,
+      standardQty: 255,
       ratePerUnit: 43,
-      totalPerLoad: 10750,
+      totalPerLoad: 10965, // 255 * 43
     },
     'Laterite Stone — 2nd': {
       unit: 'pc',
-      standardQty: 250,
+      standardQty: 255,
       ratePerUnit: 33,
-      totalPerLoad: 8250,
+      totalPerLoad: 8415, // 255 * 33
     },
     'Laterite Stone — 3rd': {
       unit: 'load',
@@ -46,6 +50,34 @@ export const INITIAL_RATES: RateConfig = {
       ratePerUnit: 1000,
       totalPerLoad: 1000,
     },
+  },
+  // Weaker-Rock operating condition rates (Section B / weaker stone condition)
+  weakerRockRates: {
+    'Laterite Stone — 1st': {
+      unit: 'pc',
+      standardQty: 255,
+      ratePerUnit: 41,
+      totalPerLoad: 10455, // 255 * 41
+    },
+    'Laterite Stone — 2nd': {
+      unit: 'pc',
+      standardQty: 255,
+      ratePerUnit: 31,
+      totalPerLoad: 7905, // 255 * 31
+    },
+    'Laterite Stone — 3rd': {
+      unit: 'load',
+      standardQty: 1,
+      ratePerUnit: 1000,
+      totalPerLoad: 1000,
+    },
+  },
+  muryLoadRate: 1000, // ₹1,000 / load
+  lattLoadRate: 2500, // ₹2,500 / load
+  loadFormula: {
+    physicalQuantity: 260, // 260 pieces
+    freeQuantity: 5, // 5 pieces free
+    ratedQuantity: 255, // 255 pieces rated
   },
   rzCustomerRates: {
     'Laterite Stone — 1st': {
@@ -2402,20 +2434,20 @@ export const INITIAL_QUARRIES: QuarryProfile[] = [
     landDetails: '20 Cent Total Quarry Plot — Survey No. 412/3B',
     contactPerson: 'Nafid Khan (+91 90484 23530)',
     active: true,
-    notes: 'Primary active laterite quarry site. High-density first-grade stone formation.',
+    notes: 'Primary active laterite quarry site. High-density first-grade stone formation. No physical warehouse stock maintained (direct vehicle loading).',
     sections: [
       {
         id: 'sec-q001-a',
         sectionCode: 'A',
-        name: 'Section A (North Cutting Face)',
-        description: 'First grade deep bench extraction zone',
+        name: 'Section A',
+        description: 'Stronger / top-rock area. Dense high-compaction laterite rock stratum yielding premium construction blocks.',
         active: true,
       },
       {
         id: 'sec-q001-b',
         sectionCode: 'B',
-        name: 'Section B (South Quarry Pit)',
-        description: 'Secondary cutting bench & commercial blocks',
+        name: 'Section B',
+        description: 'Comparatively weaker rock area and includes the currently worked portion that was partly cleared/cut previously. (Strict system rule: Never labeled Medium).',
         active: true,
       },
     ],
@@ -2426,14 +2458,17 @@ export const INITIAL_QUARRIES: QuarryProfile[] = [
       contactPhone: '+91 98470 54321',
       totalLandCent: 20,
       initialCuttingAgreementCent: 14,
+      cuttingAreaCent: 14,
+      agreementAreaCent: 14,
       referenceRatePerCent: 140000,
       referenceAgreementValue: 1960000, // 14 x 1,40,000 = ₹19,60,000
       remainingCent: 6, // 6 cent has no fixed price yet
+      undeterminedAreaCent: 6,
       paidAmount: 400000, // Only actual entered payments
       balanceAmount: 1560000, // 19,60,000 - 4,00,000
       outstandingAmount: 1560000,
       adjustments: 0,
-      notes: 'Initial cutting agreement for 14 cent at ₹1,40,000/cent. Remaining 6 cent price to be negotiated post-initial cut.',
+      notes: 'Initial cutting agreement for 14 cent at ₹1,40,000/cent. Remaining 6 cent price is currently NOT fixed. Stone count is NOT the basis for determining land-owner entitlement.',
       documents: ['Agreement_Doc_2026_Q001.pdf', 'Land_Deed_Cent20_Copy.pdf'],
       payments: [
         {
@@ -2464,12 +2499,12 @@ export const INITIAL_QUARRIES: QuarryProfile[] = [
     landDetails: '15 Cent Greenfield Laterite Hill',
     contactPerson: 'Aflah RZ (+91 98950 12345)',
     active: true,
-    notes: 'Secondary expansion quarry site for laterite stone cutting.',
+    notes: 'Newly starting quarry — fully configurable through Quarry Master.',
     sections: [
       {
         id: 'sec-q002-a',
         sectionCode: 'A',
-        name: 'Section A (Main Hill Face)',
+        name: 'Section A',
         description: 'Initial site preparation & bench development',
         active: true,
       },
@@ -2559,5 +2594,305 @@ export const INITIAL_DRIVER_COLLECTIONS: DriverCollection[] = [
     enteredBy: 'Nafid',
     createdAt: `${getTodayDateString()}T12:45:00Z`,
     quarryId: 'quarry-001',
+  },
+];
+
+// --------------------------------------------------------------------------
+// DAILY PRODUCTION RECORDS SEED (Zero warehouse stock, direct loading model)
+// --------------------------------------------------------------------------
+
+export const INITIAL_DAILY_PRODUCTION_RECORDS: QuarryDailyProductionRecord[] = [
+  {
+    id: 'prd-001',
+    productionId: 'PRD-2026-001',
+    date: getTodayDateString(),
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    section: 'Section A',
+    cuttingMachine: 'Double-Blade Track Cutter #1',
+    operator: 'Mujeeb Rahman',
+    assistantOperator: 'Hamza V',
+    helpers: 'Suresh, Binu, Maniyan (3 Splitters)',
+    startTime: '07:00 AM',
+    endTime: '11:30 AM',
+    workingHours: 4.5,
+    soilCondition: 'Dry / Compact Top Stratum',
+    rockStrength: 'Hard Top-Rock (Section A)',
+    moisture: 'Low',
+    heat: 'Moderate (29°C Morning)',
+    cuttingCondition: 'Smooth continuous cut, blade wear normal',
+    splittingCondition: 'Clean natural grain splitting, sharp 8-corner blocks',
+    cuttingNotes: 'Top bench cut along North face. Zero mud intrusions.',
+    cuttingDimensions: '13.5 x 8.5 x 9 inch',
+    finishedDimensions: '13 x 8 x 8 inch',
+    totalCutQuantity: 800,
+    finishedQuantity: 760,
+    firstQualityQuantity: 620, // All 8 corners intact
+    secondQualityQuantity: 110, // ~3/4 corners intact
+    lattQuantity: 30, // Defective/damaged blocks
+    muryQuantity: 40, // Split rubble
+    unit: 'pcs',
+    recoveryRate: 95.0, // (760 / 800) * 100
+    firstQualityRate: 81.58, // (620 / 760) * 100
+    secondQualityRate: 14.47, // (110 / 760) * 100
+    lattRate: 3.95, // (30 / 760) * 100
+    muryRate: 5.0, // (40 / 800) * 100
+    allocatedVehicle: 'KL-55-RZ-01',
+    gapPosition: 1,
+    remarks: 'Loaded directly onto 1st Gap company vehicle (KL-55-RZ-01). No warehouse accumulation.',
+    enteredBy: 'Nafid',
+    createdAt: `${getTodayDateString()}T11:45:00Z`,
+  },
+  {
+    id: 'prd-002',
+    productionId: 'PRD-2026-002',
+    date: getTodayDateString(),
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    section: 'Section B',
+    cuttingMachine: 'Single-Blade Bench Cutter #2',
+    operator: 'Razak',
+    assistantOperator: 'Musthafa',
+    helpers: 'Ayyappan, Rajesh (2 Splitters)',
+    startTime: '08:30 AM',
+    endTime: '01:00 PM',
+    workingHours: 4.5,
+    soilCondition: 'Partially Cleared Soil & Fractured Overburden',
+    rockStrength: 'Comparatively Weaker Rock (Section B)',
+    moisture: 'Moderate',
+    heat: 'High (34°C Noon)',
+    cuttingCondition: 'Moderate resistance, blade speed lowered',
+    splittingCondition: 'Occasional corner crumble during manual wedge split',
+    cuttingNotes: 'Worked portion that was partly cleared previously. Weaker stone formation.',
+    cuttingDimensions: '13.5 x 8.5 x 9 inch',
+    finishedDimensions: '13 x 8 x 8 inch',
+    totalCutQuantity: 600,
+    finishedQuantity: 520,
+    firstQualityQuantity: 210, // Lower 1st quality yield in weaker rock
+    secondQualityQuantity: 260, // Standard residential blocks
+    lattQuantity: 50,
+    muryQuantity: 80,
+    unit: 'pcs',
+    recoveryRate: 86.67, // (520 / 600) * 100
+    firstQualityRate: 40.38, // (210 / 520) * 100
+    secondQualityRate: 50.0, // (260 / 520) * 100
+    lattRate: 9.62, // (50 / 520) * 100
+    muryRate: 13.33, // (80 / 600) * 100
+    allocatedVehicle: 'KL-55-A-1021',
+    gapPosition: 2,
+    remarks: 'Direct loading onto 2nd Gap vehicle (Kabeer). Weaker-rock rate applied.',
+    enteredBy: 'Aflah',
+    createdAt: `${getTodayDateString()}T13:15:00Z`,
+  },
+  {
+    id: 'prd-003',
+    productionId: 'PRD-2026-003',
+    date: getPreviousDateString(getTodayDateString()),
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    section: 'Section A',
+    cuttingMachine: 'Double-Blade Track Cutter #1',
+    operator: 'Mujeeb Rahman',
+    assistantOperator: 'Hamza V',
+    helpers: 'Suresh, Binu, Maniyan',
+    startTime: '01:30 PM',
+    endTime: '05:30 PM',
+    workingHours: 4.0,
+    soilCondition: 'Clean bedrock bench face',
+    rockStrength: 'Hard Top-Rock (Section A)',
+    moisture: 'Low',
+    heat: 'Normal (30°C Afternoon)',
+    cuttingCondition: 'Clean straight cuts',
+    splittingCondition: 'Optimal clean splits',
+    cuttingNotes: 'Deep North-East face cutting.',
+    cuttingDimensions: '13.5 x 8.5 x 9 inch',
+    finishedDimensions: '13 x 8 x 8 inch',
+    totalCutQuantity: 700,
+    finishedQuantity: 660,
+    firstQualityQuantity: 540,
+    secondQualityQuantity: 95,
+    lattQuantity: 25,
+    muryQuantity: 40,
+    unit: 'pcs',
+    recoveryRate: 94.29,
+    firstQualityRate: 81.82,
+    secondQualityRate: 14.39,
+    lattRate: 3.79,
+    muryRate: 5.71,
+    allocatedVehicle: 'KL-55-RZ-02',
+    gapPosition: 1,
+    remarks: 'Direct dispatched under Gate Pass GP-000001.',
+    enteredBy: 'Nafid',
+    createdAt: `${getPreviousDateString(getTodayDateString())}T17:45:00Z`,
+  },
+];
+
+// --------------------------------------------------------------------------
+// DAILY GAP SYSTEM QUEUE (Physical vehicle loading slots)
+// 1st Gap -> 1st Quality (RZ MINING Fixed at Pos 1)
+// 2nd Gap -> 2nd Quality
+// 3rd Gap -> Mury (by load, no piece count)
+// 4th Gap -> Any available quality
+// --------------------------------------------------------------------------
+
+export const INITIAL_GAP_QUEUE: GapVehicleQueueItem[] = [
+  {
+    id: 'gap-q-1',
+    gapNumber: 1,
+    vehicleNumber: 'KL-55-RZ-01',
+    vehicleId: 'veh-5',
+    driver: 'Pasha',
+    owner: 'RZ Mining',
+    category: 'RZ Mining',
+    defaultExpectedQuality: '1ST QUALITY',
+    currentStatus: 'Waiting',
+    entryTime: '06:30 AM',
+    roundNumber: 1,
+    isFixedCompanyVehicle: true, // RZ MINING is FIXED at Position 1
+    notes: 'Position 1 — RZ MINING Company Tipper (Dedicated Fixed Turn)',
+  },
+  {
+    id: 'gap-q-2',
+    gapNumber: 2,
+    vehicleNumber: 'KL-55-A-1021',
+    vehicleId: 'veh-1',
+    driver: 'Kabeer',
+    owner: 'Kabeer',
+    category: 'Outside',
+    defaultExpectedQuality: '2ND QUALITY',
+    currentStatus: 'Waiting',
+    entryTime: '07:00 AM',
+    roundNumber: 1,
+    isFixedCompanyVehicle: false,
+    notes: '2nd Gap — Normally waiting for 2nd Quality stones',
+  },
+  {
+    id: 'gap-q-3',
+    gapNumber: 3,
+    vehicleNumber: 'KL-55-B-3344',
+    vehicleId: 'veh-3',
+    driver: 'Faizal',
+    owner: 'Faizal',
+    category: 'Outside',
+    defaultExpectedQuality: 'MURY',
+    currentStatus: 'Waiting',
+    entryTime: '07:15 AM',
+    roundNumber: 1,
+    isFixedCompanyVehicle: false,
+    notes: '3rd Gap — Normally waiting for Mury (Loaded by load, no piece count)',
+  },
+  {
+    id: 'gap-q-4',
+    gapNumber: 4,
+    vehicleNumber: 'KL 01 CB 5165',
+    vehicleId: 'veh-2',
+    driver: 'Salam',
+    owner: 'Faisal Outside',
+    category: 'Outside',
+    defaultExpectedQuality: 'ANY AVAILABLE',
+    currentStatus: 'Waiting',
+    entryTime: '07:30 AM',
+    roundNumber: 1,
+    isFixedCompanyVehicle: false,
+    notes: '4th Gap — Receives whichever quality becomes available according to cascading rules',
+  },
+];
+
+// --------------------------------------------------------------------------
+// GAP OFFER EVENTS (Cascading Quality Flexibility)
+// If 1st Gap declines -> Offer to 2nd Gap -> 3rd Gap -> 4th Gap
+// Vehicle can stay at quarry rather than being forced to leave
+// --------------------------------------------------------------------------
+
+export const INITIAL_GAP_OFFER_EVENTS: GapOfferEvent[] = [
+  {
+    id: 'gop-001',
+    timestamp: `${getTodayDateString()} 08:15 AM`,
+    roundNumber: 1,
+    productionRecordId: 'PRD-2026-001',
+    offeredQuality: '1ST QUALITY',
+    offeredToGap: 1,
+    vehicleNumber: 'KL-55-RZ-01',
+    driver: 'Pasha',
+    action: 'Accepted',
+    recordedBy: 'Nafid',
+  },
+  {
+    id: 'gop-002',
+    timestamp: `${getTodayDateString()} 10:45 AM`,
+    roundNumber: 1,
+    productionRecordId: 'PRD-2026-002',
+    offeredQuality: '1ST QUALITY',
+    offeredToGap: 1,
+    vehicleNumber: 'KL-55-RZ-01',
+    driver: 'Pasha',
+    action: 'Rejected',
+    rejectionReason: 'Vehicle currently undergoing trip delivery. Allowed to remain in queue for next round.',
+    nextOfferedGap: 2,
+    recordedBy: 'Aflah',
+  },
+  {
+    id: 'gop-003',
+    timestamp: `${getTodayDateString()} 10:48 AM`,
+    roundNumber: 1,
+    productionRecordId: 'PRD-2026-002',
+    offeredQuality: '1ST QUALITY',
+    offeredToGap: 2,
+    vehicleNumber: 'KL-55-A-1021',
+    driver: 'Kabeer',
+    action: 'Accepted',
+    recordedBy: 'Aflah',
+  },
+];
+
+// --------------------------------------------------------------------------
+// QUARRY ROUND LOGS (Complete round and return time sequence)
+// After a round, the vehicle that returns first becomes the next eligible vehicle
+// --------------------------------------------------------------------------
+
+export const INITIAL_ROUND_LOGS: QuarryRoundLog[] = [
+  {
+    id: 'rnd-001',
+    roundNumber: 1,
+    date: getTodayDateString(),
+    vehicleNumber: 'KL-55-RZ-01',
+    driver: 'Pasha',
+    originalGap: 1,
+    actualGapUsed: 1,
+    offeredQuality: '1ST QUALITY',
+    acceptedQuality: '1ST QUALITY',
+    physicalQty: 260,
+    freeQty: 5,
+    ratedQty: 255,
+    vehicleReceivedQty: 260, // Unloaded at customer site
+    loadingStart: '07:30 AM',
+    loadingCompletion: '07:50 AM',
+    departureTime: '07:55 AM',
+    returnTime: '10:15 AM',
+    nextEligiblePosition: 1, // Fixed Position 1 for RZ Mining
+    status: 'Returned',
+    remarks: 'Delivered to Metro Builders. Returned first — ready for next round.',
+  },
+  {
+    id: 'rnd-002',
+    roundNumber: 1,
+    date: getTodayDateString(),
+    vehicleNumber: 'KL-55-A-1021',
+    driver: 'Kabeer',
+    originalGap: 2,
+    actualGapUsed: 2,
+    offeredQuality: '1ST QUALITY',
+    acceptedQuality: '1ST QUALITY',
+    physicalQty: 260,
+    freeQty: 5,
+    ratedQty: 255,
+    vehicleReceivedQty: 250, // Customer site receipt
+    loadingStart: '10:50 AM',
+    loadingCompletion: '11:15 AM',
+    departureTime: '11:20 AM',
+    returnTime: '01:45 PM',
+    nextEligiblePosition: 2, // Returned after RZ-01, assigned Turn 2
+    status: 'Returned',
+    remarks: 'Delivered to Greenfield site. Returned and queued at 01:45 PM.',
   },
 ];

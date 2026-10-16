@@ -5,6 +5,7 @@ import { formatCurrency } from '../../utils/formatters';
 
 // Existing Views
 import { ProductionView } from '../ProductionView';
+import { DailyGapEngineView } from '../DailyGapEngineView';
 import { StockView } from '../StockView';
 import { GatePassView } from '../GatePassView';
 import { QuarryExpensesView } from '../QuarryExpensesView';
@@ -29,10 +30,12 @@ import {
   Plus,
   ShieldCheck,
   TrendingUp,
+  Repeat,
 } from 'lucide-react';
 
 export type QuarrySubTab =
   | 'production'
+  | 'gap'
   | 'quality'
   | 'stock'
   | 'gate'
@@ -60,6 +63,7 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
 }) => {
   const {
     production,
+    dailyProductionRecords,
     stock,
     expenses,
     income,
@@ -67,6 +71,7 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
     attendance,
     payrolls,
     gatePasses,
+    rates,
   } = useQuarry();
 
   const [activeTab, setActiveTab] = useState<QuarrySubTab>(initialTab);
@@ -80,17 +85,14 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
   const [selectedPayslip, setSelectedPayslip] = useState<any | null>(null);
 
   // Quarry KPIs
-  const totalProductionBlocks = production
-    .filter((p) => p.material !== 'Laterite Stone — 3rd')
-    .reduce((sum, p) => sum + p.quantity, 0);
-
+  const totalProductionBlocks = dailyProductionRecords.reduce((sum, p) => sum + (p.finishedQuantity || 0), 0);
   const totalQuarryExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const totalStockBlocks = stock['Laterite Stone — 1st'] + stock['Laterite Stone — 2nd'];
 
   const subTabs = [
-    { id: 'production', label: 'Production', icon: PackageCheck, badge: `${production.length}` },
+    { id: 'production', label: 'Production Log', icon: PackageCheck, badge: `${dailyProductionRecords.length || production.length}` },
+    { id: 'gap', label: 'Daily Gap Engine', icon: Repeat, badge: 'Pos 1 Fixed' },
     { id: 'quality', label: 'Quality & Grades', icon: Award },
-    { id: 'stock', label: 'Stock & Inventory', icon: Boxes, badge: `${(totalStockBlocks / 1000).toFixed(1)}k` },
+    { id: 'stock', label: 'Throughput & Pipeline', icon: Boxes },
     { id: 'gate', label: 'Gate Management', icon: Ticket, badge: `${gatePasses.length}` },
     { id: 'expenses', label: 'Quarry Expenses', icon: Receipt },
     { id: 'billing', label: 'Quarry Billing', icon: Coins },
@@ -147,22 +149,22 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-[#262b3b]">
           <div className="p-3 rounded-2xl bg-[#090b0e]/70 border border-[#1e2332]">
             <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">
-              Quarry Stock (Blocks)
+              Quarry Production Model
             </span>
-            <span className="text-lg font-black font-mono text-[#f3c64c] mt-0.5 block">
-              {totalStockBlocks.toLocaleString()} pcs
+            <span className="text-lg font-black font-mono text-emerald-400 mt-0.5 block">
+              Direct Loading
             </span>
-            <span className="text-[10px] text-emerald-400">1st & 2nd Class Stone</span>
+            <span className="text-[10px] text-gray-400">Zero Warehouse Stock</span>
           </div>
 
           <div className="p-3 rounded-2xl bg-[#090b0e]/70 border border-[#1e2332]">
             <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">
-              Total Produced
+              Total Cut & Dispatched
             </span>
             <span className="text-lg font-black font-mono text-gray-100 mt-0.5 block">
               {totalProductionBlocks.toLocaleString()} pcs
             </span>
-            <span className="text-[10px] text-gray-400">Season Pit Output</span>
+            <span className="text-[10px] text-gray-400">Recorded Pit Output</span>
           </div>
 
           <div className="p-3 rounded-2xl bg-[#090b0e]/70 border border-[#1e2332]">
@@ -224,91 +226,125 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
           <ProductionView onOpenProductionModal={onOpenProductionModal} />
         )}
 
+        {activeTab === 'gap' && <DailyGapEngineView />}
+
         {activeTab === 'quality' && (
           <div className="space-y-5">
-            <div className="p-4 rounded-2xl bg-[#12141a] border border-[#232736] flex items-center justify-between">
+            <div className="p-4 rounded-2xl bg-[#12141a] border border-[#232736] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold font-cinzel text-gray-100">
-                  Stone Quality Standards & Classification
+                  Operational Quality Standards & Classification
                 </h3>
                 <p className="text-xs text-gray-400">
-                  Physical and structural grading of RZ quarry laterite stone blocks
+                  Observed post-splitting • 4 defined quarry quality categories • Zero physical warehouse stock
                 </p>
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#d4af37]/20 text-[#f3c64c] border border-[#d4af37]/40">
-                P-GRADE CERTIFIED
+                PROMPT 2 COMPLIANT
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 1st Class */}
-              <div className="p-5 rounded-2xl bg-[#12141a] border border-[#d4af37]/50 space-y-3 relative overflow-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* 1st Quality */}
+              <div className="p-4 rounded-2xl bg-[#12141a] border border-[#d4af37]/50 space-y-3 relative overflow-hidden">
                 <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-[#d4af37] text-black">
-                    1ST CLASS (A-GRADE)
+                  <span className="px-2 py-0.5 rounded text-[11px] font-black bg-[#d4af37] text-black">
+                    1ST QUALITY
                   </span>
-                  <span className="text-xs font-mono font-bold text-[#f3c64c]">₹43 / pc Quarry</span>
+                  <span className="text-xs font-mono font-bold text-[#f3c64c]">
+                    ₹43 / pc (Std) • ₹41 (Weaker)
+                  </span>
                 </div>
-                <h4 className="font-bold text-gray-100 text-base">Superior Masonry Blocks</h4>
+                <h4 className="font-bold text-gray-100 text-sm">All 8 Corners Intact</h4>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Deep reddish-brown hardened laterite cut with diamond wire saws. Zero fractures, high compressive strength (3.2–3.8 MPa). Ideal for load-bearing walls and exposed facades.
+                  All 8 corners are obtained intact after manual wedge splitting. High-compaction construction blocks used for load-bearing masonry.
                 </p>
                 <div className="pt-2 border-t border-[#202534] text-xs space-y-1">
                   <div className="flex justify-between text-gray-400">
-                    <span>Current Stock:</span>
-                    <span className="font-mono font-bold text-white">{stock['Laterite Stone — 1st']} pcs</span>
+                    <span>Default Queue:</span>
+                    <span className="font-mono text-emerald-400 font-bold">1st Gap Vehicle</span>
                   </div>
                   <div className="flex justify-between text-gray-400">
-                    <span>Customer Sale Rate:</span>
-                    <span className="font-mono font-bold text-[#f3c64c]">₹65 / pc delivered</span>
+                    <span>Standard Load:</span>
+                    <span className="font-mono text-white">260 pc + 5 Free = 255 Rated</span>
                   </div>
                 </div>
               </div>
 
-              {/* 2nd Class */}
-              <div className="p-5 rounded-2xl bg-[#12141a] border border-blue-900/40 space-y-3">
+              {/* 2nd Quality */}
+              <div className="p-4 rounded-2xl bg-[#12141a] border border-blue-900/40 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-blue-600 text-white">
-                    2ND CLASS (B-GRADE)
+                  <span className="px-2 py-0.5 rounded text-[11px] font-black bg-blue-600 text-white">
+                    2ND QUALITY
                   </span>
-                  <span className="text-xs font-mono font-bold text-blue-400">₹33 / pc Quarry</span>
+                  <span className="text-xs font-mono font-bold text-blue-400">
+                    ₹33 / pc (Std) • ₹31 (Weaker)
+                  </span>
                 </div>
-                <h4 className="font-bold text-gray-100 text-base">Foundation & Boundary Grade</h4>
+                <h4 className="font-bold text-gray-100 text-sm">~3/4 Corners Intact</h4>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Sturdy laterite stone with minor pore variations. Suitable for basements, boundary walls, compound framing, and commercial foundations.
+                  Approximately 3/4 corners are remaining according to quarry classification. Ideal for residential basements, foundation footings, and boundary fences.
                 </p>
                 <div className="pt-2 border-t border-[#202534] text-xs space-y-1">
                   <div className="flex justify-between text-gray-400">
-                    <span>Current Stock:</span>
-                    <span className="font-mono font-bold text-white">{stock['Laterite Stone — 2nd']} pcs</span>
+                    <span>Default Queue:</span>
+                    <span className="font-mono text-blue-400 font-bold">2nd Gap Vehicle</span>
                   </div>
                   <div className="flex justify-between text-gray-400">
-                    <span>Customer Sale Rate:</span>
-                    <span className="font-mono font-bold text-blue-400">₹55 / pc delivered</span>
+                    <span>Standard Load:</span>
+                    <span className="font-mono text-white">260 pc + 5 Free = 255 Rated</span>
                   </div>
                 </div>
               </div>
 
-              {/* 3rd Class */}
-              <div className="p-5 rounded-2xl bg-[#12141a] border border-amber-900/40 space-y-3">
+              {/* Latt / 3rd Number */}
+              <div className="p-4 rounded-2xl bg-[#12141a] border border-orange-900/40 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-amber-600 text-white">
-                    3RD CLASS (RUBBLE / LOAD)
+                  <span className="px-2 py-0.5 rounded text-[11px] font-black bg-orange-600 text-white">
+                    LATT / 3RD NUMBER
                   </span>
-                  <span className="text-xs font-mono font-bold text-amber-400">₹1,000 / load Quarry</span>
+                  <span className="text-xs font-mono font-bold text-orange-400">
+                    ₹2,500 / load
+                  </span>
                 </div>
-                <h4 className="font-bold text-gray-100 text-base">Crusher & Filling Stone</h4>
+                <h4 className="font-bold text-gray-100 text-sm">Damaged / Defect Material</h4>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Bulk quarried laterite rubble, trench stone, and road filling materials. Sold strictly by the tipper load.
+                  Stone that suffered damage or structural defect during extraction/splitting that does not qualify as 2nd quality stone.
                 </p>
                 <div className="pt-2 border-t border-[#202534] text-xs space-y-1">
                   <div className="flex justify-between text-gray-400">
-                    <span>Current Stock:</span>
-                    <span className="font-mono font-bold text-white">{stock['Laterite Stone — 3rd']} loads</span>
+                    <span>Default Queue:</span>
+                    <span className="font-mono text-orange-400 font-bold">4th Gap / Open Offer</span>
                   </div>
                   <div className="flex justify-between text-gray-400">
-                    <span>Customer Sale Rate:</span>
-                    <span className="font-mono font-bold text-amber-400">₹5,000 / load delivered</span>
+                    <span>Standard Load:</span>
+                    <span className="font-mono text-white">260 pc + 5 Free = 255 Rated</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mury */}
+              <div className="p-4 rounded-2xl bg-[#12141a] border border-amber-900/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-black bg-amber-600 text-white">
+                    MURY
+                  </span>
+                  <span className="text-xs font-mono font-bold text-amber-400">
+                    ₹1,000 / load
+                  </span>
+                </div>
+                <h4 className="font-bold text-gray-100 text-sm">Broken Stone Rubble</h4>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Stone breaks or splits during the cutting/splitting process into rubble. Recorded as Quantity + Unit = LOAD (no piece count).
+                </p>
+                <div className="pt-2 border-t border-[#202534] text-xs space-y-1">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Default Queue:</span>
+                    <span className="font-mono text-amber-400 font-bold">3rd Gap Vehicle</span>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Measurement:</span>
+                    <span className="font-mono text-white">Sold Strictly by LOAD</span>
                   </div>
                 </div>
               </div>

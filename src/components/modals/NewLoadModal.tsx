@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useQuarry } from '../../context/QuarryContext';
-import { MaterialType, VehicleCategory, LoadOrder } from '../../types/quarry';
+import { MaterialType, VehicleCategory, LoadOrder, RateCondition } from '../../types/quarry';
 import { formatCurrency, getTodayDateString, getCurrentTimeString } from '../../utils/formatters';
-import { X, Calculator, Truck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Calculator, Truck, CheckCircle2, AlertCircle, Info, Layers } from 'lucide-react';
 
 interface NewLoadModalProps {
   isOpen: boolean;
@@ -21,7 +21,6 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
     customers,
     rates,
     currentUser,
-    stock,
     createLoad,
     confirmAndGenerateGatePass,
     orders,
@@ -49,6 +48,14 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
   const [remarks, setRemarks] = useState('');
   const [immediateGatePass, setImmediateGatePass] = useState(true);
 
+  // Quarry Rate Condition & Load Formula (Prompt 2 Specifications)
+  const [rateCondition, setRateCondition] = useState<RateCondition>('Standard Rock');
+  const [physicalQuantity, setPhysicalQuantity] = useState<number>(260);
+  const [freeQuantity, setFreeQuantity] = useState<number>(5);
+  const [ratedQuantity, setRatedQuantity] = useState<number>(255);
+  // Vehicle Received Quantity (stored completely independently from quarry rated quantity)
+  const [vehicleReceivedQuantity, setVehicleReceivedQuantity] = useState<number>(260);
+
   // When order is selected: Auto-populate Customer, Quality, Quantity, Rate, Delivery Location & Payment Terms
   const handleOrderSelect = (ordId: string) => {
     setSelectedOrderId(ordId);
@@ -63,7 +70,10 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
       if (ord.customer) setCustomerName(ord.customer);
       if (ord.deliveryLocation) setDestination(ord.deliveryLocation);
       if (ord.quality) handleMaterialChange(ord.quality);
-      if (ord.quantity) setQuantity(ord.quantity);
+      if (ord.quantity) {
+        setQuantity(ord.quantity);
+        setVehicleReceivedQuantity(ord.quantity);
+      }
       if (ord.rate) setCustomRate(ord.rate);
       if (ord.agentName) setAgentName(ord.agentName);
       if (ord.paymentTerms) setPaymentTerms(ord.paymentTerms);
@@ -96,6 +106,11 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
         setDestination(initialData.destination || '');
         setMaterial(initialData.material || 'Laterite Stone — 1st');
         setQuantity(initialData.quantity || 250);
+        setPhysicalQuantity(initialData.physicalQuantity || 260);
+        setFreeQuantity(initialData.freeQuantity || 5);
+        setRatedQuantity(initialData.ratedQuantity || 255);
+        setVehicleReceivedQuantity(initialData.vehicleReceivedQuantity || initialData.quantity || 260);
+        setRateCondition(initialData.rateCondition || 'Standard Rock');
         setPaymentReceived(initialData.paymentReceived || 0);
         setRemarks(initialData.remarks || '');
       } else {
@@ -115,6 +130,11 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
         }
         setMaterial('Laterite Stone — 1st');
         setQuantity(250);
+        setPhysicalQuantity(260);
+        setFreeQuantity(5);
+        setRatedQuantity(255);
+        setVehicleReceivedQuantity(260);
+        setRateCondition('Standard Rock');
         setPaymentReceived(0);
         setRemarks('');
         setImmediateGatePass(true);
@@ -149,22 +169,56 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
     setMaterial(mat);
     if (mat === 'Laterite Stone — 3rd') {
       setQuantity(1);
+      setRatedQuantity(1);
+      setVehicleReceivedQuantity(1);
     } else {
       setQuantity(250);
+      setPhysicalQuantity(260);
+      setFreeQuantity(5);
+      setRatedQuantity(255);
+      setVehicleReceivedQuantity(260);
     }
   };
 
   if (!isOpen) return null;
 
-  // Live Auto Calculations
+  // Live Auto Calculations according to Rate Condition & Formula
   const is3rd = material === 'Laterite Stone — 3rd';
-  const quarryRate = rates.quarryRates[material]?.ratePerUnit || (is3rd ? 1000 : 43);
-  const quarryAmount = is3rd ? quarryRate * quantity : quantity * quarryRate;
 
+  // Quarry purchase rate based on Rate Condition (Standard Rock vs Weaker Rock)
+  const activeQuarryRates =
+    rateCondition === 'Weaker Rock' && rates.weakerRockRates
+      ? rates.weakerRockRates
+      : rates.quarryRates;
+
+  const quarryRate =
+    activeQuarryRates[material]?.ratePerUnit ||
+    (is3rd
+      ? rates.muryLoadRate || 1000
+      : material === 'Laterite Stone — 1st'
+      ? rateCondition === 'Weaker Rock'
+        ? 41
+        : 43
+      : rateCondition === 'Weaker Rock'
+      ? 31
+      : 33);
+
+  // Quarry purchase bill uses Rated Quantity (255 pcs or load count)
+  const effectiveQuarryBillQty = is3rd ? quantity : (ratedQuantity || 255);
+  const quarryAmount = is3rd ? quarryRate * quantity : effectiveQuarryBillQty * quarryRate;
+
+  // Customer sale rate
   const defaultRzRate = rates.rzCustomerRates[material]?.ratePerUnit || (is3rd ? 5000 : 65);
   const customerSaleRate =
     customRate !== null ? customRate : vehicleCategory === 'RZ Mining' ? defaultRzRate : quarryRate;
-  const customerSaleAmount = is3rd ? customerSaleRate * quantity : quantity * customerSaleRate;
+
+  // Vehicle side uses actual vehicle received quantity (e.g., 260 or 250)
+  const effectiveVehicleSaleQty = is3rd ? quantity : (vehicleReceivedQuantity || quantity || 260);
+  const customerSaleAmount = is3rd
+    ? customerSaleRate * quantity
+    : vehicleCategory === 'RZ Mining'
+    ? effectiveVehicleSaleQty * customerSaleRate
+    : quarryAmount;
 
   let driverBatta = 0;
   let vehicleTripRent = 0;
@@ -175,7 +229,7 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
   let netProfit = 0;
 
   if (vehicleCategory === 'RZ Mining') {
-    const multiplier = is3rd ? quantity : quantity / 250;
+    const multiplier = is3rd ? quantity : effectiveVehicleSaleQty / 250;
     driverBatta = rates.loadExpenses.driverBatta * (multiplier || 1);
     vehicleTripRent = rates.loadExpenses.vehicleTripRent * (multiplier || 1);
     loadingCharge = rates.loadExpenses.loadingCharge * (multiplier || 1);
@@ -208,6 +262,12 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
         destination,
         material,
         quantity,
+        rateCondition,
+        physicalQuantity: is3rd ? undefined : Number(physicalQuantity),
+        freeQuantity: is3rd ? undefined : Number(freeQuantity),
+        ratedQuantity: is3rd ? quantity : Number(ratedQuantity),
+        vehicleReceivedQuantity: is3rd ? quantity : Number(vehicleReceivedQuantity),
+        quarryRate,
         customerSaleRate,
         paymentReceived: Number(paymentReceived) || 0,
         agentName,
@@ -230,9 +290,9 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#101218] border border-[#262c3e] w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden my-auto">
+      <div className="bg-[#101218] border border-[#262c3e] w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#141722] border-b border-[#262c3e] flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-[#141722] border-b border-[#262c3e] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#d4af37]/15 border border-[#d4af37]/30 flex items-center justify-center text-[#d4af37]">
               <Truck className="w-4 h-4" />
@@ -242,7 +302,7 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
                 New Quarry Load / Order Dispatch
               </h3>
               <p className="text-[11px] text-[#d4af37]/80">
-                Auto-calculates Quarry Purchase, Customer Sale, Fleet Expenses & Gate Pass
+                Direct Pit Extraction • 260 + 5 Free = 255 Rated • Independent Vehicle Received Qty
               </p>
             </div>
           </div>
@@ -254,38 +314,30 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
           {/* Top Info Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-[#0b0c10] border border-[#1f2433] text-xs">
             <div className="flex items-center gap-2">
-              <span className="text-gray-400">Date:</span>
-              <span className="font-semibold text-gray-200">{getTodayDateString()}</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-gray-300 font-semibold">DIRECT PIT EXTRACTION & DISPATCH</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">Time:</span>
-              <span className="font-semibold text-gray-200">{getCurrentTimeString()}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">Entered By:</span>
-              <span className="px-2.5 py-0.5 rounded font-bold text-[#d4af37] bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                {currentUser}
-                <span className="text-[10px] text-gray-400 font-normal">(Verified)</span>
-              </span>
+            <div className="text-gray-400">
+              Date: <b className="text-white font-mono">{getTodayDateString()}</b> • Time: <b className="text-white font-mono">{getCurrentTimeString()}</b>
             </div>
           </div>
 
-          {/* Link to Existing Booked Order */}
-          <div className="p-3.5 rounded-xl bg-[#141824] border border-amber-500/30 space-y-2">
+          {/* Connect Booked Customer Order */}
+          <div className="p-3 bg-[#131622] rounded-xl border border-[#d4af37]/30 space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                <span>Select Booked Order (Auto-populates all details — Zero duplicate data)</span>
+              <label className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Dispatch From Booked Customer Order (Optional)</span>
               </label>
               {selectedOrderId && (
                 <button
                   type="button"
-                  onClick={() => setSelectedOrderId('')}
-                  className="text-[11px] text-gray-400 hover:text-rose-400 underline"
+                  onClick={() => handleOrderSelect('')}
+                  className="text-[10px] text-gray-400 hover:text-white underline"
                 >
                   Clear Selection
                 </button>
@@ -294,38 +346,24 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
             <select
               value={selectedOrderId}
               onChange={(e) => handleOrderSelect(e.target.value)}
-              className="w-full bg-[#1b2030] border border-[#2e374f] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+              className="w-full bg-[#181d2a] border border-[#2e374d] rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-[#d4af37]"
             >
-              <option value="">-- No Linked Order (Direct Walk-in / Ad-hoc Dispatch) --</option>
+              <option value="">-- Manual Direct Load (No Prior Booking) --</option>
               {orders
-                .filter(
-                  (o) =>
-                    o.status !== 'DISPATCHED' &&
-                    o.status !== 'DELIVERED' &&
-                    o.status !== 'PAID' &&
-                    o.status !== 'CANCELLED'
-                )
+                .filter((o) => o.status === 'Booked' || o.status === 'Pending Production')
                 .map((ord) => (
                   <option key={ord.id} value={ord.id}>
-                    {ord.orderId} • {ord.customer} ({ord.quality} — {ord.quantity} pcs) • Status: {ord.status} • {ord.paymentTerms}
+                    {ord.orderId} • {ord.customer} — {ord.quality} ({ord.quantity} pcs @ ₹{ord.rate}) • {ord.deliveryLocation}
                   </option>
                 ))}
             </select>
-            {selectedOrderId && (
-              <div className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  Order linked. Selecting this order auto-populates customer, quality, quantity, rate, location & payment terms without creating duplicate data.
-                </span>
-              </div>
-            )}
           </div>
 
-          {/* Vehicle & Driver Section */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Vehicle Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-300 mb-1">
-                Select Vehicle *
+                Vehicle Number *
               </label>
               <select
                 value={vehicleId}
@@ -408,47 +446,110 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
             </div>
           </div>
 
-          {/* Material, Quantity & Sale Rate with Live Quarry Stock Check */}
-          <div className="space-y-2 p-3.5 bg-[#0b0d12] rounded-xl border border-[#202535]">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div className="sm:col-span-2">
+          {/* Rate Condition & Material Section */}
+          <div className="p-3.5 bg-[#0b0d12] rounded-xl border border-[#202535] space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Stone Material / Quality *
+                  Quarry Rate Condition * (Strict Rule: Never 'Medium')
                 </label>
                 <select
-                  value={material}
-                  onChange={(e) => handleMaterialChange(e.target.value as MaterialType)}
-                  className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-[#f3c64c] font-bold focus:outline-none focus:border-[#d4af37]"
+                  value={rateCondition}
+                  onChange={(e) => setRateCondition(e.target.value as RateCondition)}
+                  className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-xs text-[#f3c64c] font-bold focus:outline-none focus:border-[#d4af37]"
                 >
-                  <option value="Laterite Stone — 1st">
-                    Laterite Stone — 1st (Std 250 pcs)
-                  </option>
-                  <option value="Laterite Stone — 2nd">
-                    Laterite Stone — 2nd (Std 250 pcs)
-                  </option>
-                  <option value="Laterite Stone — 3rd">
-                    Laterite Stone — 3rd (1 Load)
-                  </option>
+                  <option value="Standard Rock">Standard Rock (Section A — 1st ₹43 / 2nd ₹33)</option>
+                  <option value="Weaker Rock">Weaker Rock (Section B — 1st ₹41 / 2nd ₹31)</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Quantity ({is3rd ? 'load' : 'pcs'}) *
+                  Stone Quality / Material *
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value) || 0)}
-                  className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-gray-100 font-mono font-bold focus:outline-none focus:border-[#d4af37]"
-                  required
-                />
+                <select
+                  value={material}
+                  onChange={(e) => handleMaterialChange(e.target.value as MaterialType)}
+                  className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-[#d4af37]"
+                >
+                  <option value="Laterite Stone — 1st">Laterite Stone — 1st (8 corners intact)</option>
+                  <option value="Laterite Stone — 2nd">Laterite Stone — 2nd (~3/4 corners intact)</option>
+                  <option value="Laterite Stone — 3rd">Laterite Stone — 3rd / Mury (Load Unit)</option>
+                </select>
               </div>
+            </div>
 
+            {/* Operational Load Formula: 260 + 5 Free = 255 Rated vs Vehicle Received Qty */}
+            {!is3rd ? (
+              <div className="p-3 rounded-xl bg-[#11141e] border border-sky-800/40 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-sky-400 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Operational Load Formula: 260 + 5 Free = 255 Rated</span>
+                  </span>
+                  <span className="text-[10px] text-gray-400">Physical ≠ Overwritten</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-0.5">Physical Qty (Pit)</label>
+                    <input
+                      type="number"
+                      value={physicalQuantity}
+                      onChange={(e) => setPhysicalQuantity(Number(e.target.value) || 0)}
+                      className="w-full bg-[#161924] border border-[#2a3044] rounded-lg px-2.5 py-1.5 font-mono font-bold text-white text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-0.5">Free Buffer Qty</label>
+                    <input
+                      type="number"
+                      value={freeQuantity}
+                      onChange={(e) => setFreeQuantity(Number(e.target.value) || 0)}
+                      className="w-full bg-[#161924] border border-[#2a3044] rounded-lg px-2.5 py-1.5 font-mono font-bold text-emerald-400 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-0.5">Quarry Rated (Bill)</label>
+                    <input
+                      type="number"
+                      value={ratedQuantity}
+                      onChange={(e) => setRatedQuantity(Number(e.target.value) || 0)}
+                      className="w-full bg-[#161924] border border-[#2a3044] rounded-lg px-2.5 py-1.5 font-mono font-bold text-[#f3c64c] text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-amber-300 font-bold mb-0.5">Vehicle Received Qty *</label>
+                    <input
+                      type="number"
+                      value={vehicleReceivedQuantity}
+                      onChange={(e) => setVehicleReceivedQuantity(Number(e.target.value) || 0)}
+                      className="w-full bg-[#161924] border border-amber-500/50 rounded-lg px-2.5 py-1.5 font-mono font-bold text-amber-300 text-xs focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  <span className="text-[#f3c64c] font-semibold">Vehicle-Side Rule:</span> Vehicle Received Quantity ({vehicleReceivedQuantity} pcs) is stored independently from Quarry Rated Quantity ({ratedQuantity} pcs). The vehicle ledger computes revenue using the actual quantity received/unloaded.
+                </p>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 text-xs space-y-1">
+                <span className="font-bold text-amber-400 block">Mury Load Accounting:</span>
+                <p className="text-[11px] text-gray-300">
+                  Mury does NOT have a quarry-level piece-count requirement. Recorded strictly as <b>{quantity} LOAD</b> at {formatCurrency(quarryRate)}/load.
+                </p>
+              </div>
+            )}
+
+            {/* Sale Rate */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center justify-between">
-                  <span>Sale Rate (₹)</span>
+                  <span>Customer Sale Rate (₹ / {is3rd ? 'load' : 'pc'})</span>
                   {selectedOrderId && (
                     <span className="text-[9px] text-amber-400 font-normal">From Order</span>
                   )}
@@ -463,22 +564,18 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
                   required
                 />
               </div>
-            </div>
 
-            {/* Quarry Stock Allocation Pipeline Status */}
-            <div className="pt-2 border-t border-[#1a1e2b] flex items-center justify-between text-xs">
-              <span className="text-gray-400">
-                Current Quarry Stock: <b className="text-white font-mono">{stock[material]} {is3rd ? 'loads' : 'pcs'}</b>
-              </span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                stock[material] >= quantity
-                  ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/50'
-                  : 'bg-amber-950/60 text-amber-400 border border-amber-800/50'
-              }`}>
-                {stock[material] >= quantity
-                  ? '✓ Quarry Stock Allocation Ready'
-                  : '⚡ Allocating from Ongoing Pit Production'}
-              </span>
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                  Quarry Purchase Rate
+                </label>
+                <div className="px-3 py-2 bg-[#161924] border border-[#2a3044] rounded-xl text-sm font-mono font-bold text-gray-300 flex items-center justify-between">
+                  <span>{formatCurrency(quarryRate)} / {is3rd ? 'load' : 'pc'}</span>
+                  <span className="text-[10px] text-gray-400 uppercase font-sans">
+                    {rateCondition}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -493,10 +590,9 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
                 onChange={(e) => setAgentName(e.target.value)}
                 className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-[#d4af37]"
               >
-                <option value="Direct Order">Direct Order (No Agent)</option>
-                <option value="Shafi (Agent)">Shafi (Agent — ₹250/load)</option>
-                <option value="Latheef (Agent)">Latheef (Agent — ₹250/load)</option>
-                <option value="Rasheed (Orderman)">Rasheed (Orderman — ₹250/load)</option>
+                <option value="Direct Order">Direct Order (No Commission)</option>
+                <option value="Siddique (Orderman)">Siddique (Orderman — ₹250/load)</option>
+                <option value="Ashraf (Agent)">Ashraf (Agent — ₹250/load)</option>
                 <option value="Babu (Orderman)">Babu (Orderman — ₹250/load)</option>
               </select>
             </div>
@@ -529,14 +625,14 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
                 </span>
               </div>
               <span className="text-[11px] font-mono text-gray-400">
-                {material} × {quantity} {is3rd ? 'load' : 'pcs'}
+                Quarry: {effectiveQuarryBillQty} {is3rd ? 'load' : 'pcs rated'} • Vehicle: {effectiveVehicleSaleQty} {is3rd ? 'load' : 'pcs'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-3">
               {/* Quarry Purchase */}
               <div className="p-2.5 rounded-lg bg-[#0a0c10] border border-[#222736]">
-                <div className="text-[10px] text-gray-400">Quarry Rate</div>
+                <div className="text-[10px] text-gray-400">Quarry Cost ({effectiveQuarryBillQty} {is3rd ? 'load' : 'rated'})</div>
                 <div className="text-gray-300 font-mono">
                   {is3rd ? formatCurrency(quarryRate) : `${formatCurrency(quarryRate)}/pc`}
                 </div>
@@ -547,7 +643,7 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
 
               {/* Customer Sale */}
               <div className="p-2.5 rounded-lg bg-[#0a0c10] border border-[#d4af37]/30">
-                <div className="text-[10px] text-[#d4af37]">Customer Sale Rate</div>
+                <div className="text-[10px] text-[#d4af37]">Customer Sale ({effectiveVehicleSaleQty} {is3rd ? 'load' : 'pcs'})</div>
                 <div className="text-[#d4af37]/90 font-mono">
                   {is3rd ? formatCurrency(customerSaleRate) : `${formatCurrency(customerSaleRate)}/pc`}
                 </div>
@@ -648,42 +744,39 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="e.g. Dispatched to Site Bench #2, customer will pay remaining on site"
-              className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-[#d4af37]"
+              className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-xs text-gray-100 focus:outline-none focus:border-[#d4af37]"
             />
           </div>
 
-          {/* Gate Pass Generation Checkbox */}
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-[#141824] border border-[#282f44]">
+          {/* Instant Gate Pass Generation */}
+          <div className="flex items-center gap-2 p-3 bg-[#0d0f15] border border-[#1e2332] rounded-xl text-xs">
             <input
               type="checkbox"
-              id="gatePassCheck"
+              id="immediateGatePass"
               checked={immediateGatePass}
               onChange={(e) => setImmediateGatePass(e.target.checked)}
-              className="w-4 h-4 accent-[#d4af37] rounded cursor-pointer"
+              className="w-4 h-4 rounded text-[#d4af37] focus:ring-0 bg-[#161924] border-[#2a3044]"
             />
-            <label htmlFor="gatePassCheck" className="text-xs text-gray-200 cursor-pointer">
-              <span className="font-bold text-[#d4af37]">
-                Generate Gate Pass & Dispatch Vehicle Immediately
-              </span>{' '}
-              (Auto-reduces stock & records quarry ledger)
+            <label htmlFor="immediateGatePass" className="text-gray-300 select-none cursor-pointer">
+              Automatically issue Outward Gate Pass immediately upon load creation
             </label>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-[#222736]">
+          {/* Modal Actions */}
+          <div className="pt-2 flex items-center justify-end gap-3 border-t border-[#1f2434] shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white bg-[#171a25] transition-colors"
+              className="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white bg-[#141722] border border-[#262c3e]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="gold-btn px-6 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2"
+              className="gold-btn px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{immediateGatePass ? 'Confirm & Issue Gate Pass' : 'Save Load Draft'}</span>
+              <span>Confirm & Dispatch Load</span>
             </button>
           </div>
         </form>

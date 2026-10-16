@@ -14,14 +14,25 @@ export const RateMasterView: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Recalculate totals per load
+    // Recalculate totals per load based on rated quantity (255 pcs)
     const updated = { ...formRates };
+    const ratedQty = formRates.loadFormula?.ratedQuantity || 255;
+
     updated.quarryRates['Laterite Stone — 1st'].totalPerLoad =
-      updated.quarryRates['Laterite Stone — 1st'].ratePerUnit * 250;
+      updated.quarryRates['Laterite Stone — 1st'].ratePerUnit * ratedQty;
     updated.quarryRates['Laterite Stone — 2nd'].totalPerLoad =
-      updated.quarryRates['Laterite Stone — 2nd'].ratePerUnit * 250;
+      updated.quarryRates['Laterite Stone — 2nd'].ratePerUnit * ratedQty;
     updated.quarryRates['Laterite Stone — 3rd'].totalPerLoad =
-      updated.quarryRates['Laterite Stone — 3rd'].ratePerUnit;
+      formRates.muryLoadRate || updated.quarryRates['Laterite Stone — 3rd'].ratePerUnit;
+
+    if (updated.weakerRockRates) {
+      updated.weakerRockRates['Laterite Stone — 1st'].totalPerLoad =
+        updated.weakerRockRates['Laterite Stone — 1st'].ratePerUnit * ratedQty;
+      updated.weakerRockRates['Laterite Stone — 2nd'].totalPerLoad =
+        updated.weakerRockRates['Laterite Stone — 2nd'].ratePerUnit * ratedQty;
+      updated.weakerRockRates['Laterite Stone — 3rd'].totalPerLoad =
+        formRates.muryLoadRate || 1000;
+    }
 
     updated.rzCustomerRates['Laterite Stone — 1st'].totalPerLoad =
       updated.rzCustomerRates['Laterite Stone — 1st'].ratePerUnit * 250;
@@ -91,22 +102,27 @@ export const RateMasterView: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Section 1: Base Quarry Rates (All Vehicles) */}
+        {/* Section 1: Standard Quarry Rates */}
         <div className="bg-[#12141a] rounded-2xl border border-[#232736] p-5 space-y-4">
-          <div className="border-b border-[#232736] pb-3">
-            <h3 className="font-cinzel font-bold text-sm text-[#d4af37]">
-              1. Base Quarry Rates (Received by All Vehicles)
-            </h3>
-            <p className="text-xs text-gray-400">
-              The internal quarry purchase cost per stone unit/load
-            </p>
+          <div className="border-b border-[#232736] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="font-cinzel font-bold text-sm text-[#d4af37]">
+                1. Standard Quarry Sale Rates (Top-Rock / Standard Condition)
+              </h3>
+              <p className="text-xs text-gray-400">
+                Applicable for Section A and standard stone quarrying operations
+              </p>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              Section A Standard
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
-              <span className="text-xs font-bold text-gray-200">Laterite Stone — 1st</span>
+              <span className="text-xs font-bold text-gray-200">1ST QUALITY (8 Corners Intact)</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Rate / pc: ₹</span>
+                <span className="text-xs text-gray-400">₹</span>
                 <input
                   type="number"
                   value={formRates.quarryRates['Laterite Stone — 1st'].ratePerUnit}
@@ -122,18 +138,19 @@ export const RateMasterView: React.FC = () => {
                       },
                     })
                   }
-                  className="w-24 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-gray-100"
+                  className="w-24 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-[#f3c64c]"
                 />
+                <span className="text-xs text-gray-400">/ piece</span>
               </div>
-              <div className="text-[11px] text-[#f3c64c] font-mono">
-                Standard Load (250 pcs): <b>{formatCurrency(q1)}</b>
+              <div className="text-[11px] text-gray-400 font-mono">
+                Rated Load (255 pcs): <b className="text-gray-200">{formatCurrency(formRates.quarryRates['Laterite Stone — 1st'].ratePerUnit * 255)}</b>
               </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
-              <span className="text-xs font-bold text-gray-200">Laterite Stone — 2nd</span>
+              <span className="text-xs font-bold text-gray-200">2ND QUALITY (~3/4 Corners)</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Rate / pc: ₹</span>
+                <span className="text-xs text-gray-400">₹</span>
                 <input
                   type="number"
                   value={formRates.quarryRates['Laterite Stone — 2nd'].ratePerUnit}
@@ -149,24 +166,26 @@ export const RateMasterView: React.FC = () => {
                       },
                     })
                   }
-                  className="w-24 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-gray-100"
+                  className="w-24 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-blue-400"
                 />
+                <span className="text-xs text-gray-400">/ piece</span>
               </div>
-              <div className="text-[11px] text-[#f3c64c] font-mono">
-                Standard Load (250 pcs): <b>{formatCurrency(q2)}</b>
+              <div className="text-[11px] text-gray-400 font-mono">
+                Rated Load (255 pcs): <b className="text-gray-200">{formatCurrency(formRates.quarryRates['Laterite Stone — 2nd'].ratePerUnit * 255)}</b>
               </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
-              <span className="text-xs font-bold text-gray-200">Laterite Stone — 3rd</span>
+              <span className="text-xs font-bold text-gray-200">MURY (Split / Broken Stone)</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Rate / load: ₹</span>
+                <span className="text-xs text-gray-400">₹</span>
                 <input
                   type="number"
-                  value={formRates.quarryRates['Laterite Stone — 3rd'].ratePerUnit}
+                  value={formRates.muryLoadRate || 1000}
                   onChange={(e) =>
                     setFormRates({
                       ...formRates,
+                      muryLoadRate: Number(e.target.value) || 0,
                       quarryRates: {
                         ...formRates.quarryRates,
                         'Laterite Stone — 3rd': {
@@ -176,13 +195,191 @@ export const RateMasterView: React.FC = () => {
                       },
                     })
                   }
-                  className="w-28 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-gray-100"
+                  className="w-28 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-amber-400"
                 />
+                <span className="text-xs text-gray-400">/ load</span>
               </div>
-              <div className="text-[11px] text-[#f3c64c] font-mono">
-                Rubble Load: <b>{formatCurrency(q3)}</b>
+              <div className="text-[10px] text-gray-400">
+                Unit = LOAD (No piece count required)
               </div>
             </div>
+
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-xs font-bold text-gray-200">LATT / 3RD NUMBER (Defect Stone)</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">₹</span>
+                <input
+                  type="number"
+                  value={formRates.lattLoadRate || 2500}
+                  onChange={(e) =>
+                    setFormRates({
+                      ...formRates,
+                      lattLoadRate: Number(e.target.value) || 0,
+                    })
+                  }
+                  className="w-28 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-orange-400"
+                />
+                <span className="text-xs text-gray-400">/ load</span>
+              </div>
+              <div className="text-[10px] text-gray-400">
+                Damage/defect not qualifying as 2nd
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Weaker-Rock Condition Rates */}
+        <div className="bg-[#12141a] rounded-2xl border border-amber-900/30 p-5 space-y-4">
+          <div className="border-b border-[#232736] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-cinzel font-bold text-sm text-amber-400">
+                  2. Weaker-Rock Operating Condition Rates (e.g. Section B)
+                </h3>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Applicable for Section B (weaker rock area / worked portion). <b className="text-rose-400">STRICT RULE: Never labeled 'Medium'.</b>
+              </p>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              Section B Rate Condition
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-xs font-bold text-gray-200">1ST QUALITY (Weaker Rock)</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">₹</span>
+                <input
+                  type="number"
+                  value={formRates.weakerRockRates?.['Laterite Stone — 1st']?.ratePerUnit || 41}
+                  onChange={(e) =>
+                    setFormRates({
+                      ...formRates,
+                      weakerRockRates: {
+                        ...formRates.weakerRockRates,
+                        'Laterite Stone — 1st': {
+                          ...formRates.weakerRockRates['Laterite Stone — 1st'],
+                          ratePerUnit: Number(e.target.value) || 0,
+                        },
+                      },
+                    })
+                  }
+                  className="w-24 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-[#f3c64c]"
+                />
+                <span className="text-xs text-gray-400">/ piece</span>
+              </div>
+              <div className="text-[11px] text-gray-400 font-mono">
+                Rated Load (255 pcs): <b className="text-gray-200">{formatCurrency((formRates.weakerRockRates?.['Laterite Stone — 1st']?.ratePerUnit || 41) * 255)}</b>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-xs font-bold text-gray-200">2ND QUALITY (Weaker Rock)</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">₹</span>
+                <input
+                  type="number"
+                  value={formRates.weakerRockRates?.['Laterite Stone — 2nd']?.ratePerUnit || 31}
+                  onChange={(e) =>
+                    setFormRates({
+                      ...formRates,
+                      weakerRockRates: {
+                        ...formRates.weakerRockRates,
+                        'Laterite Stone — 2nd': {
+                          ...formRates.weakerRockRates['Laterite Stone — 2nd'],
+                          ratePerUnit: Number(e.target.value) || 0,
+                        },
+                      },
+                    })
+                  }
+                  className="w-24 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-blue-400"
+                />
+                <span className="text-xs text-gray-400">/ piece</span>
+              </div>
+              <div className="text-[11px] text-gray-400 font-mono">
+                Rated Load (255 pcs): <b className="text-gray-200">{formatCurrency((formRates.weakerRockRates?.['Laterite Stone — 2nd']?.ratePerUnit || 31) * 255)}</b>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-xs font-bold text-gray-200">MURY (Weaker Rock)</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">₹</span>
+                <input
+                  type="number"
+                  value={formRates.muryLoadRate || 1000}
+                  disabled
+                  className="w-28 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-amber-400 opacity-80"
+                />
+                <span className="text-xs text-gray-400">/ load</span>
+              </div>
+              <div className="text-[10px] text-gray-400">Fixed load rate across sections</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-xs font-bold text-gray-200">LATT / 3RD NUMBER</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">₹</span>
+                <input
+                  type="number"
+                  value={formRates.lattLoadRate || 2500}
+                  disabled
+                  className="w-28 bg-[#161924] border border-[#282f42] rounded-lg px-2 py-1 text-sm font-mono font-bold text-orange-400 opacity-80"
+                />
+                <span className="text-xs text-gray-400">/ load</span>
+              </div>
+              <div className="text-[10px] text-gray-400">Fixed load rate across sections</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: 260 Physical + 5 Free + 255 Rated Load Rule */}
+        <div className="bg-[#12141a] rounded-2xl border border-sky-900/40 p-5 space-y-4">
+          <div className="border-b border-[#232736] pb-3">
+            <h3 className="font-cinzel font-bold text-sm text-sky-400">
+              3. Operational Load Formula: 260 Physical + 5 Free = 255 Rated
+            </h3>
+            <p className="text-xs text-gray-400">
+              For 1st, 2nd, and Latt/3rd-number stone loads. The physical quantity (260) and quarry rated quantity (255) are stored separately.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-gray-400 uppercase text-[10px] block font-sans font-bold">Physical Loaded Quantity</span>
+              <div className="text-xl font-bold text-white">
+                {formRates.loadFormula?.physicalQuantity || 260} pcs
+              </div>
+              <p className="text-[10px] text-gray-400 font-sans">
+                Full vehicle physical count loaded at pit face. Stored permanently for operational records.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-gray-400 uppercase text-[10px] block font-sans font-bold">Free Quantity Allowance</span>
+              <div className="text-xl font-bold text-emerald-400">
+                +{formRates.loadFormula?.freeQuantity || 5} pcs free
+              </div>
+              <p className="text-[10px] text-gray-400 font-sans">
+                Industry customary stone buffer for transit and splitting variances.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] space-y-2">
+              <span className="text-gray-400 uppercase text-[10px] block font-sans font-bold">Quarry Rated Quantity</span>
+              <div className="text-xl font-bold text-[#f3c64c]">
+                {formRates.loadFormula?.ratedQuantity || 255} pcs billed
+              </div>
+              <p className="text-[10px] text-gray-400 font-sans">
+                Basis for quarry purchase bill. Physical 260 is NOT overwritten.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-[#090b0f] border border-[#1d2232] text-xs text-gray-300 leading-relaxed">
+            <b className="text-sky-300 font-sans">Vehicle Management Independence Rule:</b> Vehicle Management uses the actual quantity received/unloaded (e.g., 260 received: 260 × vehicle rate; 250 received: 250 × vehicle rate). Vehicle received quantity is stored completely independently from quarry rated quantity.
           </div>
         </div>
 

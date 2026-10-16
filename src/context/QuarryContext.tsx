@@ -9,9 +9,16 @@ import {
   StaffAdvance,
   StaffPayroll,
   RateConfig,
+  RateCondition,
   LoadOrder,
   GatePass,
   ProductionEntry,
+  QuarryDailyProductionRecord,
+  GapSlotNumber,
+  GapVehicleQueueItem,
+  GapOfferEvent,
+  QuarryRoundLog,
+  OperationalQuality,
   StockAdjustment,
   QuarryIncome,
   QuarryExpense,
@@ -48,6 +55,10 @@ import {
   INITIAL_LOADS,
   INITIAL_GATE_PASSES,
   INITIAL_PRODUCTION,
+  INITIAL_DAILY_PRODUCTION_RECORDS,
+  INITIAL_GAP_QUEUE,
+  INITIAL_GAP_OFFER_EVENTS,
+  INITIAL_ROUND_LOGS,
   INITIAL_INCOME,
   INITIAL_EXPENSES,
   INITIAL_PAYMENTS,
@@ -191,6 +202,29 @@ interface QuarryContextType {
   advanceOrderWorkflow: (orderId: string, nextStatus: OrderStatus, extraData?: Partial<StoneOrder>) => void;
   assignVehicleToOrder: (orderId: string, vehicleNumber: string, driverName?: string) => void;
   dispatchOrder: (orderId: string, paymentReceived?: number, remarks?: string) => GatePass;
+
+  // Daily Production & Recovery Engine (Zero Warehouse Stock Model)
+  dailyProductionRecords: QuarryDailyProductionRecord[];
+  addDailyProductionRecord: (
+    record: Omit<QuarryDailyProductionRecord, 'id' | 'createdAt'> & { id?: string }
+  ) => QuarryDailyProductionRecord;
+  updateDailyProductionRecord: (id: string, updates: Partial<QuarryDailyProductionRecord>) => void;
+  deleteDailyProductionRecord: (id: string) => void;
+
+  // Daily Gap System & Rotation Engine (4-Gap Queue, Cascading Offers, Round Return Order)
+  gapQueue: GapVehicleQueueItem[];
+  gapOfferEvents: GapOfferEvent[];
+  roundLogs: QuarryRoundLog[];
+  updateGapSlotVehicle: (gapNumber: GapSlotNumber, vehicleId: string) => void;
+  offerGapLoad: (
+    offeredQuality: '1ST QUALITY' | '2ND QUALITY' | 'LATT / 3RD' | 'MURY',
+    currentGap: GapSlotNumber,
+    accepted: boolean,
+    rejectionReason?: string
+  ) => { nextGap: GapSlotNumber | null; accepted: boolean };
+  recordRoundEvent: (round: Omit<QuarryRoundLog, 'id'> & { id?: string }) => QuarryRoundLog;
+  completeVehicleReturn: (vehicleNumber: string, returnTime?: string) => void;
+  advanceGapRound: () => void;
 
   resetAllData: () => void;
   exportBackupJSON: () => string;
@@ -367,6 +401,30 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : (INITIAL_DRIVER_COLLECTIONS || []);
   });
 
+  // Daily Production Records (Zero Warehouse Stock Model)
+  const [dailyProductionRecords, setDailyProductionRecords] = useState<QuarryDailyProductionRecord[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_daily_production_records`);
+    return saved ? JSON.parse(saved) : (INITIAL_DAILY_PRODUCTION_RECORDS || []);
+  });
+
+  // Daily Gap System (4-Gap queue)
+  const [gapQueue, setGapQueue] = useState<GapVehicleQueueItem[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_gap_queue`);
+    return saved ? JSON.parse(saved) : (INITIAL_GAP_QUEUE || []);
+  });
+
+  // Gap Offer Events (Cascading Offers)
+  const [gapOfferEvents, setGapOfferEvents] = useState<GapOfferEvent[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_gap_offer_events`);
+    return saved ? JSON.parse(saved) : (INITIAL_GAP_OFFER_EVENTS || []);
+  });
+
+  // Quarry Round Logs
+  const [roundLogs, setRoundLogs] = useState<QuarryRoundLog[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_round_logs`);
+    return saved ? JSON.parse(saved) : (INITIAL_ROUND_LOGS || []);
+  });
+
   // Sync state to local cache for instant offline fallback
   useEffect(() => {
     try {
@@ -395,6 +453,10 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       localStorage.setItem(`${STORAGE_KEY}_billing_config`, JSON.stringify(billingConfig));
       localStorage.setItem(`${STORAGE_KEY}_theme`, theme);
       localStorage.setItem(`${STORAGE_KEY}_driver_collections`, JSON.stringify(driverCollections));
+      localStorage.setItem(`${STORAGE_KEY}_daily_production_records`, JSON.stringify(dailyProductionRecords));
+      localStorage.setItem(`${STORAGE_KEY}_gap_queue`, JSON.stringify(gapQueue));
+      localStorage.setItem(`${STORAGE_KEY}_gap_offer_events`, JSON.stringify(gapOfferEvents));
+      localStorage.setItem(`${STORAGE_KEY}_round_logs`, JSON.stringify(roundLogs));
     } catch (e) {
       console.warn('Cache error:', e);
     }
@@ -424,6 +486,10 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     billingConfig,
     theme,
     driverCollections,
+    dailyProductionRecords,
+    gapQueue,
+    gapOfferEvents,
+    roundLogs,
   ]);
 
   // Refresh data from shared backend database
@@ -541,23 +607,61 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     material: MaterialType,
     quantity: number,
     vehicleCategory: 'Outside' | 'RZ Mining',
-    customRates?: { quarryRate?: number; customerSaleRate?: number }
+    customRates?: {
+      quarryRate?: number;
+      customerSaleRate?: number;
+      rateCondition?: RateCondition;
+      ratedQuantity?: number;
+      vehicleReceivedQuantity?: number;
+    }
   ) => {
     const is3rd = material === 'Laterite Stone — 3rd';
-    let quarryRate = rates.quarryRates[material]?.ratePerUnit || (is3rd ? 1000 : 43);
+    const rateCondition = customRates?.rateCondition || 'Standard Rock';
+    const activeQuarryRates =
+      rateCondition === 'Weaker Rock' && rates.weakerRockRates
+        ? rates.weakerRockRates
+        : rates.quarryRates;
+
+    let quarryRate =
+      activeQuarryRates[material]?.ratePerUnit ||
+      (is3rd
+        ? rates.muryLoadRate || 1000
+        : material === 'Laterite Stone — 1st'
+        ? rateCondition === 'Weaker Rock'
+          ? 41
+          : 43
+        : rateCondition === 'Weaker Rock'
+        ? 31
+        : 33);
+
     if (customRates?.quarryRate !== undefined) {
       quarryRate = customRates.quarryRate;
     }
-    const quarryAmount = is3rd ? quarryRate * quantity : quantity * quarryRate;
+
+    // Quarry rated quantity (default 255 for pieces, or load count for Mury)
+    const ratedQty = is3rd
+      ? quantity
+      : customRates?.ratedQuantity !== undefined
+      ? customRates.ratedQuantity
+      : rates.loadFormula?.ratedQuantity || 255;
+
+    const quarryAmount = is3rd ? quarryRate * quantity : ratedQty * quarryRate;
 
     let customerSaleRate = rates.rzCustomerRates[material]?.ratePerUnit || (is3rd ? 5000 : 65);
     if (customRates?.customerSaleRate !== undefined) {
       customerSaleRate = customRates.customerSaleRate;
     }
 
+    // Vehicle received quantity is stored independently from quarry rated quantity
+    const vehReceivedQty = is3rd
+      ? quantity
+      : customRates?.vehicleReceivedQuantity !== undefined
+      ? customRates.vehicleReceivedQuantity
+      : quantity;
+
     const customerSaleAmount =
       vehicleCategory === 'RZ Mining'
-        ? (is3rd ? customerSaleRate * quantity : quantity * customerSaleRate)
+        ? (is3rd ? customerSaleRate * quantity : vehReceivedQty * customerSaleRate)
         : quarryAmount;
 
     let driverBatta = 0;
@@ -569,7 +673,7 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let netProfit = 0;
 
     if (vehicleCategory === 'RZ Mining') {
-      const multiplier = is3rd ? quantity : quantity / 250;
+      const multiplier = is3rd ? quantity : vehReceivedQty / 250;
       driverBatta = rates.loadExpenses.driverBatta * (multiplier || 1);
       vehicleTripRent = rates.loadExpenses.vehicleTripRent * (multiplier || 1);
       loadingCharge = rates.loadExpenses.loadingCharge * (multiplier || 1);
@@ -598,12 +702,21 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const loadSeq = loads.length + 1001;
     const loadNumber = padLoadNumber(loadSeq);
     const material: MaterialType = data.material || 'Laterite Stone — 1st';
-    const quantity = data.quantity ?? (material === 'Laterite Stone — 3rd' ? 1 : 250);
+    const is3rd = material === 'Laterite Stone — 3rd';
+    const quantity = data.quantity ?? (is3rd ? 1 : 250);
     const vehicleCategory = data.vehicleCategory || 'RZ Mining';
+    const rateCondition: RateCondition = data.rateCondition || 'Standard Rock';
+    const physicalQuantity = is3rd ? undefined : (data.physicalQuantity ?? 260);
+    const freeQuantity = is3rd ? undefined : (data.freeQuantity ?? 5);
+    const ratedQuantity = is3rd ? quantity : (data.ratedQuantity ?? 255);
+    const vehicleReceivedQuantity = is3rd ? quantity : (data.vehicleReceivedQuantity ?? data.quantity ?? 260);
 
     const calculated = calculateLoadDetails(material, quantity, vehicleCategory, {
       quarryRate: data.quarryRate,
       customerSaleRate: data.customerSaleRate,
+      rateCondition,
+      ratedQuantity,
+      vehicleReceivedQuantity,
     });
 
     const paymentReceived = data.paymentReceived ?? 0;
@@ -624,7 +737,12 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       destination: data.destination || 'Site Delivery',
       material,
       quantity,
-      unit: material === 'Laterite Stone — 3rd' ? 'load' : 'pcs',
+      unit: is3rd ? 'load' : 'pcs',
+      rateCondition,
+      physicalQuantity,
+      freeQuantity,
+      ratedQuantity,
+      vehicleReceivedQuantity,
       ...calculated,
       paymentReceived,
       balance,
@@ -1328,6 +1446,10 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setBillingConfig(INITIAL_BILLING_CONFIG);
     setThemeState('rz_gold');
     setDriverCollections(INITIAL_DRIVER_COLLECTIONS);
+    setDailyProductionRecords(INITIAL_DAILY_PRODUCTION_RECORDS);
+    setGapQueue(INITIAL_GAP_QUEUE);
+    setGapOfferEvents(INITIAL_GAP_OFFER_EVENTS);
+    setRoundLogs(INITIAL_ROUND_LOGS);
 
     fetch('/api/reset', { method: 'POST' }).catch(console.error);
   };
@@ -2091,6 +2213,229 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [currentUser, addQuarryIncome]
   );
 
+  // Daily Production Record actions
+  const addDailyProductionRecord = useCallback(
+    (recordData: Omit<QuarryDailyProductionRecord, 'id' | 'createdAt'> & { id?: string }): QuarryDailyProductionRecord => {
+      const id = recordData.id || `prd-${Date.now()}`;
+      const cut = Number(recordData.totalCutQuantity) || 0;
+      const finished = Number(recordData.finishedQuantity) || 0;
+      const first = Number(recordData.firstQualityQuantity) || 0;
+      const second = Number(recordData.secondQualityQuantity) || 0;
+      const latt = Number(recordData.lattQuantity) || 0;
+      const mury = Number(recordData.muryQuantity) || 0;
+
+      const record: QuarryDailyProductionRecord = {
+        ...recordData,
+        id,
+        productionId: recordData.productionId || `PRD-2026-${String(dailyProductionRecords.length + 101).padStart(3, '0')}`,
+        totalCutQuantity: cut,
+        finishedQuantity: finished,
+        firstQualityQuantity: first,
+        secondQualityQuantity: second,
+        lattQuantity: latt,
+        muryQuantity: mury,
+        recoveryRate: cut > 0 ? Number(((finished / cut) * 100).toFixed(2)) : null,
+        firstQualityRate: finished > 0 ? Number(((first / finished) * 100).toFixed(2)) : null,
+        secondQualityRate: finished > 0 ? Number(((second / finished) * 100).toFixed(2)) : null,
+        lattRate: finished > 0 ? Number(((latt / finished) * 100).toFixed(2)) : null,
+        muryRate: cut > 0 ? Number(((mury / cut) * 100).toFixed(2)) : null,
+        enteredBy: recordData.enteredBy || currentUser,
+        createdAt: new Date().toISOString(),
+      };
+
+      setDailyProductionRecords((prev) => [record, ...prev]);
+
+      fetch('/api/daily-production-records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      }).catch(console.error);
+
+      return record;
+    },
+    [currentUser, dailyProductionRecords.length]
+  );
+
+  const updateDailyProductionRecord = useCallback(
+    (id: string, updates: Partial<QuarryDailyProductionRecord>) => {
+      setDailyProductionRecords((prev) =>
+        prev.map((r) => {
+          if (r.id === id) {
+            const updated = { ...r, ...updates, updatedAt: new Date().toISOString() };
+            const cut = updated.totalCutQuantity || 0;
+            const finished = updated.finishedQuantity || 0;
+            updated.recoveryRate = cut > 0 ? Number(((finished / cut) * 100).toFixed(2)) : null;
+            updated.firstQualityRate = finished > 0 ? Number((((updated.firstQualityQuantity || 0) / finished) * 100).toFixed(2)) : null;
+            updated.secondQualityRate = finished > 0 ? Number((((updated.secondQualityQuantity || 0) / finished) * 100).toFixed(2)) : null;
+            updated.lattRate = finished > 0 ? Number((((updated.lattQuantity || 0) / finished) * 100).toFixed(2)) : null;
+            updated.muryRate = cut > 0 ? Number((((updated.muryQuantity || 0) / cut) * 100).toFixed(2)) : null;
+            return updated;
+          }
+          return r;
+        })
+      );
+    },
+    []
+  );
+
+  const deleteDailyProductionRecord = useCallback((id: string) => {
+    setDailyProductionRecords((prev) => prev.filter((r) => r.id !== id));
+    fetch(`/api/daily-production-records/${id}`, { method: 'DELETE' }).catch(console.error);
+  }, []);
+
+  // Daily Gap System Actions
+  const updateGapSlotVehicle = useCallback(
+    (gapNumber: GapSlotNumber, vehicleId: string) => {
+      const veh = vehicles.find((v) => v.id === vehicleId);
+      if (!veh) return;
+
+      const driverObj = drivers.find((d) => d.vehicle === veh.vehicleNumber || d.name === veh.driver);
+
+      setGapQueue((prev) =>
+        prev.map((slot) => {
+          if (slot.gapNumber === gapNumber) {
+            return {
+              ...slot,
+              vehicleId: veh.id,
+              vehicleNumber: veh.vehicleNumber,
+              driver: driverObj ? driverObj.name : veh.driver,
+              owner: veh.owner,
+              category: veh.category,
+              isFixedCompanyVehicle: veh.category === 'RZ Mining' || veh.vehicleNumber === 'KL-55-RZ-01',
+              currentStatus: 'Waiting',
+              entryTime: getCurrentTimeString(),
+            };
+          }
+          return slot;
+        })
+      );
+    },
+    [vehicles, drivers]
+  );
+
+  const offerGapLoad = useCallback(
+    (
+      offeredQuality: '1ST QUALITY' | '2ND QUALITY' | 'LATT / 3RD' | 'MURY',
+      currentGap: GapSlotNumber,
+      accepted: boolean,
+      rejectionReason?: string
+    ) => {
+      const targetSlot = gapQueue.find((s) => s.gapNumber === currentGap) || gapQueue[0];
+      const nextGap: GapSlotNumber | null = accepted ? null : (currentGap < 4 ? ((currentGap + 1) as GapSlotNumber) : null);
+
+      const newEvent: GapOfferEvent = {
+        id: `gop-${Date.now()}`,
+        timestamp: `${getTodayDateString()} ${getCurrentTimeString()}`,
+        roundNumber: targetSlot.roundNumber || 1,
+        offeredQuality,
+        offeredToGap: currentGap,
+        vehicleNumber: targetSlot.vehicleNumber,
+        driver: targetSlot.driver,
+        action: accepted ? 'Accepted' : 'Rejected',
+        rejectionReason: accepted ? undefined : (rejectionReason || 'Declined load; remains in queue for next turn'),
+        nextOfferedGap: nextGap,
+        recordedBy: currentUser,
+      };
+
+      setGapOfferEvents((prev) => [newEvent, ...prev]);
+
+      if (accepted) {
+        setGapQueue((prev) =>
+          prev.map((s) => (s.gapNumber === currentGap ? { ...s, currentStatus: 'Loading' } : s))
+        );
+      } else {
+        // Vehicle remains at quarry queue rather than being forced to leave
+        setGapQueue((prev) =>
+          prev.map((s) => (s.gapNumber === currentGap ? { ...s, currentStatus: 'Waiting' } : s))
+        );
+      }
+
+      return { nextGap, accepted };
+    },
+    [gapQueue, currentUser]
+  );
+
+  const recordRoundEvent = useCallback(
+    (roundData: Omit<QuarryRoundLog, 'id'> & { id?: string }): QuarryRoundLog => {
+      const newRound: QuarryRoundLog = {
+        ...roundData,
+        id: roundData.id || `rnd-${Date.now()}`,
+        status: roundData.status || 'Loading',
+      };
+      setRoundLogs((prev) => [newRound, ...prev]);
+      return newRound;
+    },
+    []
+  );
+
+  const completeVehicleReturn = useCallback(
+    (vehicleNumber: string, returnTime?: string) => {
+      const time = returnTime || getCurrentTimeString();
+      setRoundLogs((prev) => {
+        const matchingIdx = prev.findIndex((r) => r.vehicleNumber === vehicleNumber && !r.returnTime);
+        if (matchingIdx >= 0) {
+          const updated = [...prev];
+          const currRound = updated[matchingIdx].roundNumber;
+          const returnedCount = updated.filter((r) => r.roundNumber === currRound && r.returnTime).length;
+          const isRz = vehicleNumber === 'KL-55-RZ-01';
+          updated[matchingIdx] = {
+            ...updated[matchingIdx],
+            returnTime: time,
+            status: 'Returned',
+            nextEligiblePosition: isRz ? 1 : Math.max(2, returnedCount + 2),
+          };
+          return updated;
+        }
+        return prev;
+      });
+
+      setGapQueue((prev) =>
+        prev.map((slot) => {
+          if (slot.vehicleNumber === vehicleNumber) {
+            return {
+              ...slot,
+              currentStatus: 'Returned',
+              notes: `Returned to quarry at ${time}. Queued for next round.`,
+            };
+          }
+          return slot;
+        })
+      );
+    },
+    []
+  );
+
+  const advanceGapRound = useCallback(() => {
+    setGapQueue((prev) => {
+      const rzSlot = prev.find((s) => s.isFixedCompanyVehicle || s.vehicleNumber === 'KL-55-RZ-01') || prev[0];
+      const outsideSlots = prev.filter((s) => s.id !== rzSlot.id);
+
+      const rotatedOutside = outsideSlots.length > 1
+        ? [...outsideSlots.slice(1), outsideSlots[0]]
+        : outsideSlots;
+
+      const currentRound = (rzSlot.roundNumber || 1) + 1;
+
+      return [
+        {
+          ...rzSlot,
+          gapNumber: 1 as GapSlotNumber,
+          roundNumber: currentRound,
+          currentStatus: 'Waiting',
+          isFixedCompanyVehicle: true,
+          notes: 'RZ MINING — Fixed Position 1 (Dedicated Company Turn)',
+        },
+        ...rotatedOutside.map((slot, idx) => ({
+          ...slot,
+          gapNumber: ((idx + 2) as GapSlotNumber),
+          roundNumber: currentRound,
+          currentStatus: 'Waiting' as const,
+          notes: `Round #${currentRound} Turn #${idx + 2}`,
+        })),
+      ];
+    });
+  }, []);
+
   return (
     <QuarryContext.Provider
       value={{
@@ -2184,6 +2529,18 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         advanceOrderWorkflow,
         assignVehicleToOrder,
         dispatchOrder,
+        dailyProductionRecords,
+        addDailyProductionRecord,
+        updateDailyProductionRecord,
+        deleteDailyProductionRecord,
+        gapQueue,
+        gapOfferEvents,
+        roundLogs,
+        updateGapSlotVehicle,
+        offerGapLoad,
+        recordRoundEvent,
+        completeVehicleReturn,
+        advanceGapRound,
         resetAllData,
         exportBackupJSON,
         importBackupJSON,
