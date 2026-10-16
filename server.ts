@@ -19,6 +19,9 @@ import {
   INITIAL_ADVANCES,
   INITIAL_STOCK,
   INITIAL_STATEMENTS,
+  INITIAL_ROTATIONS,
+  INITIAL_VEHICLE_TRANSACTIONS,
+  INITIAL_ORDERS,
 } from './src/data/seedData.ts';
 
 dotenv.config();
@@ -33,61 +36,6 @@ app.use(express.json({ limit: '10mb' }));
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-// Authorized Email Allowlist configuration
-const DEFAULT_AUTHORIZED_EMAILS = [
-  'nafidkhan@racezoneventures.com',
-  'aflah@racezoneventures.com',
-  'pullatsulthan@gmail.com',
-];
-
-function getAllowlist(): string[] {
-  const envEmails = process.env.AUTHORIZED_EMAILS;
-  if (envEmails) {
-    return envEmails
-      .split(',')
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-  }
-  return DEFAULT_AUTHORIZED_EMAILS;
-}
-
-// Match user identity based on Google email
-function resolveUserIdentity(email: string) {
-  const normalized = email.trim().toLowerCase();
-  const allowlist = getAllowlist();
-
-  // Check if authorized
-  const isAuthorized = allowlist.some(
-    (allowed) =>
-      normalized === allowed ||
-      (allowed.startsWith('nafid') && normalized.includes('nafid')) ||
-      (allowed.startsWith('aflah') && normalized.includes('aflah')) ||
-      (allowed.startsWith('pullat') && normalized.includes('pullat'))
-  );
-
-  if (!isAuthorized) {
-    return null;
-  }
-
-  // Determine user shortName & name
-  let shortName: 'Nafid' | 'Aflah' | 'Sulthan' = 'Aflah';
-  let name = 'Aflah RZ';
-
-  if (normalized.includes('nafid') || normalized === 'nafidkhan@racezoneventures.com') {
-    shortName = 'Nafid';
-    name = 'Nafid Khan';
-  } else if (normalized.includes('pullat') || normalized === 'pullatsulthan@gmail.com') {
-    shortName = 'Sulthan';
-    name = 'Sulthan Pullat';
-  }
-
-  return {
-    shortName,
-    name,
-    email: normalized,
-  };
 }
 
 // Database helper functions
@@ -108,10 +56,16 @@ interface QuarryDatabase {
   expenses: any[];
   payments: any[];
   statements: any[];
+  rotations: any[];
+  vehicleTransactions: any[];
+  orders: any[];
 }
 
 function getInitialDatabase(): QuarryDatabase {
   return {
+    rotations: INITIAL_ROTATIONS,
+    vehicleTransactions: INITIAL_VEHICLE_TRANSACTIONS,
+    orders: INITIAL_ORDERS,
     vehicles: INITIAL_VEHICLES.map((v) => ({
       ...v,
       created_by_user_id: 'goog_nafid_rz',
@@ -240,7 +194,33 @@ function loadDatabase(): QuarryDatabase {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf-8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      let needsSave = false;
+      if (!parsed.rotations || !Array.isArray(parsed.rotations) || parsed.rotations.length === 0) {
+        parsed.rotations = INITIAL_ROTATIONS;
+        needsSave = true;
+      }
+      if (!parsed.vehicleTransactions || !Array.isArray(parsed.vehicleTransactions) || parsed.vehicleTransactions.length === 0) {
+        parsed.vehicleTransactions = INITIAL_VEHICLE_TRANSACTIONS;
+        needsSave = true;
+      }
+      if (!parsed.orders || !Array.isArray(parsed.orders) || parsed.orders.length === 0) {
+        parsed.orders = INITIAL_ORDERS;
+        needsSave = true;
+      }
+      if (parsed.vehicles && Array.isArray(parsed.vehicles)) {
+        parsed.vehicles.forEach((v: any) => {
+          if (!v.ownerType) {
+            const isComp = (v.category === 'RZ Mining') || (v.owner && v.owner.toLowerCase().includes('rz'));
+            v.ownerType = isComp ? 'COMPANY' : 'OUTSIDE';
+            needsSave = true;
+          }
+        });
+      }
+      if (needsSave) {
+        saveDatabase(parsed);
+      }
+      return parsed;
     }
   } catch (err) {
     console.error('Error reading database file, initializing fresh:', err);
@@ -270,84 +250,24 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// Google Authentication Verification endpoint
+// Authentication endpoint: Direct Access Mode (No Login required)
 app.post('/api/auth/verify', (req: Request, res: Response) => {
-  try {
-    const { credential, email, googleId, name, picture } = req.body;
-
-    let targetEmail = email;
-    let targetName = name;
-    let targetGoogleId = googleId || 'goog_user_' + Date.now();
-    let targetPicture = picture;
-
-    // If client sent a Google ID token credential JWT from GSI
-    if (credential && typeof credential === 'string') {
-      try {
-        const parts = credential.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
-          targetEmail = payload.email;
-          targetName = payload.name;
-          targetGoogleId = payload.sub || targetGoogleId;
-          targetPicture = payload.picture || targetPicture;
-        }
-      } catch (jwtErr) {
-        console.warn('Failed to decode credential JWT payload:', jwtErr);
-      }
-    }
-
-    if (!targetEmail) {
-      res.status(400).json({
-        authorized: false,
-        error: 'Google account email is required for verification.',
-      });
-      return;
-    }
-
-    // Verify against authorized allowlist
-    const resolved = resolveUserIdentity(targetEmail);
-
-    if (!resolved) {
-      console.warn(`[AUTH] Access Denied: Unauthorized Google account "${targetEmail}"`);
-      res.status(403).json({
-        authorized: false,
-        email: targetEmail,
-        error: 'This Google account is not authorized to access RZ Laterite Stone Quarry.',
-      });
-      return;
-    }
-
-    console.log(`[AUTH] Access Granted for ${resolved.shortName} (${targetEmail})`);
-
-    const user = {
-      id:
-        targetGoogleId ||
-        (resolved.shortName === 'Nafid'
-          ? 'goog_nafid_rz'
-          : resolved.shortName === 'Sulthan'
-          ? 'goog_sulthan_rz'
-          : 'goog_aflah_rz'),
-      email: targetEmail,
-      name: targetName || resolved.name,
-      shortName: resolved.shortName,
-      picture:
-        targetPicture ||
-        (resolved.shortName === 'Nafid'
-          ? 'https://ui-avatars.com/api/?name=Nafid+Khan&background=d4af37&color=090a0d&bold=true'
-          : resolved.shortName === 'Sulthan'
-          ? 'https://ui-avatars.com/api/?name=Sulthan+Pullat&background=d4af37&color=090a0d&bold=true'
-          : 'https://ui-avatars.com/api/?name=Aflah+RZ&background=d4af37&color=090a0d&bold=true'),
+  const { email, name } = req.body || {};
+  const isAflah = email && email.toLowerCase().includes('aflah');
+  const shortName = isAflah ? 'Aflah' : 'Nafid';
+  res.json({
+    authorized: true,
+    user: {
+      id: isAflah ? 'op_aflah_rz' : 'op_nafid_rz',
+      email: isAflah ? 'aflah@racezoneventures.com' : 'nafidkhan@racezoneventures.com',
+      name: name || (isAflah ? 'Aflah RZ' : 'Nafid Khan'),
+      shortName,
+      picture: isAflah
+        ? 'https://ui-avatars.com/api/?name=Aflah+RZ&background=d4af37&color=090a0d&bold=true'
+        : 'https://ui-avatars.com/api/?name=Nafid+Khan&background=d4af37&color=090a0d&bold=true',
       verifiedAt: new Date().toISOString(),
-    };
-
-    res.json({
-      authorized: true,
-      user,
-    });
-  } catch (err: any) {
-    console.error('Auth verification error:', err);
-    res.status(500).json({ authorized: false, error: 'Authentication verification failed' });
-  }
+    },
+  });
 });
 
 // Full state endpoint for multi-device synchronization
@@ -505,18 +425,12 @@ app.post('/api/statements', (req: Request, res: Response) => {
   stmt.created_by_name = stmt.created_by_name || stmt.generatedBy || 'Nafid';
   stmt.created_by_user_id =
     stmt.created_by_user_id ||
-    (stmt.generatedBy === 'Nafid'
-      ? 'goog_nafid_rz'
-      : stmt.generatedBy === 'Sulthan'
-      ? 'goog_sulthan_rz'
-      : 'goog_aflah_rz');
+    (stmt.generatedBy === 'Aflah' ? 'op_aflah_rz' : 'op_nafid_rz');
   stmt.created_by_email =
     stmt.created_by_email ||
-    (stmt.generatedBy === 'Nafid'
-      ? 'nafidkhan@racezoneventures.com'
-      : stmt.generatedBy === 'Sulthan'
-      ? 'pullatsulthan@gmail.com'
-      : 'aflah@racezoneventures.com');
+    (stmt.generatedBy === 'Aflah'
+      ? 'aflah@racezoneventures.com'
+      : 'nafidkhan@racezoneventures.com');
   db.statements = [stmt, ...(db.statements || [])];
   saveDatabase(db);
   res.json(stmt);
@@ -674,6 +588,121 @@ app.post('/api/payrolls', (req: Request, res: Response) => {
 // Rates
 app.put('/api/rates', (req: Request, res: Response) => {
   db.rates = req.body;
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+// Vehicle Rotations
+app.get('/api/rotations', (req: Request, res: Response) => {
+  res.json(db.rotations || []);
+});
+
+app.get('/api/rotations/:date', (req: Request, res: Response) => {
+  const { date } = req.params;
+  const found = (db.rotations || []).find((r: any) => r.rotationDate === date);
+  if (found) {
+    res.json(found);
+  } else {
+    res.status(404).json({ error: `No rotation recorded for date ${date}` });
+  }
+});
+
+app.post('/api/rotations', (req: Request, res: Response) => {
+  const rotation = req.body;
+  if (!rotation.id) {
+    rotation.id = `rot-${rotation.rotationDate || Date.now()}-${Date.now().toString().slice(-4)}`;
+  }
+  rotation.createdAt = rotation.createdAt || new Date().toISOString();
+  rotation.updatedAt = new Date().toISOString();
+
+  // If a rotation already exists for this date, update it, preserving all other dates in history
+  const existingIdx = (db.rotations || []).findIndex(
+    (r: any) => r.id === rotation.id || r.rotationDate === rotation.rotationDate
+  );
+  if (existingIdx >= 0) {
+    db.rotations[existingIdx] = rotation;
+  } else {
+    db.rotations = [rotation, ...(db.rotations || [])];
+  }
+  saveDatabase(db);
+  res.json(rotation);
+});
+
+app.put('/api/rotations/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body;
+  db.rotations = (db.rotations || []).map((r: any) =>
+    r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
+  );
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+// Vehicle Transactions (Unified Accounting Engine)
+app.get('/api/vehicle-transactions', (req: Request, res: Response) => {
+  res.json(db.vehicleTransactions || []);
+});
+
+app.post('/api/vehicle-transactions', (req: Request, res: Response) => {
+  const txn = req.body;
+  if (!txn.id) {
+    txn.id = `vtx-${Date.now()}`;
+  }
+  txn.createdAt = txn.createdAt || new Date().toISOString();
+  db.vehicleTransactions = [txn, ...(db.vehicleTransactions || [])];
+  saveDatabase(db);
+  res.json(txn);
+});
+
+app.put('/api/vehicle-transactions/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body;
+  db.vehicleTransactions = (db.vehicleTransactions || []).map((t: any) =>
+    t.id === id ? { ...t, ...updates } : t
+  );
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+app.delete('/api/vehicle-transactions/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  db.vehicleTransactions = (db.vehicleTransactions || []).filter((t: any) => t.id !== id);
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+// Stone Order Management
+app.get('/api/orders', (req: Request, res: Response) => {
+  res.json(db.orders || []);
+});
+
+app.post('/api/orders', (req: Request, res: Response) => {
+  const order = req.body;
+  if (!order.id) {
+    order.id = `ord-${Date.now()}`;
+  }
+  if (!order.orderId) {
+    order.orderId = `ORD-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+  }
+  order.createdAt = order.createdAt || new Date().toISOString();
+  db.orders = [order, ...(db.orders || [])];
+  saveDatabase(db);
+  res.json(order);
+});
+
+app.put('/api/orders/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body;
+  db.orders = (db.orders || []).map((o: any) =>
+    o.id === id || o.orderId === id ? { ...o, ...updates, updatedAt: new Date().toISOString() } : o
+  );
+  saveDatabase(db);
+  res.json({ success: true });
+});
+
+app.delete('/api/orders/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  db.orders = (db.orders || []).filter((o: any) => o.id !== id && o.orderId !== id);
   saveDatabase(db);
   res.json({ success: true });
 });

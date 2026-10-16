@@ -48,12 +48,15 @@ export const VehicleManagementView: React.FC = () => {
     e.preventDefault();
     if (!vehicleNumber || !owner || !driver) return;
 
+    const ownerType = category === 'RZ Mining' ? 'COMPANY' : 'OUTSIDE';
+
     if (editingVehicle) {
       updateVehicle(editingVehicle.id, {
         vehicleNumber,
         owner,
         driver,
         category,
+        ownerType,
         capacity: Number(capacity),
         status,
         remarks,
@@ -64,6 +67,7 @@ export const VehicleManagementView: React.FC = () => {
         owner,
         driver,
         category,
+        ownerType,
         capacity: Number(capacity),
         status,
         active: true,
@@ -175,15 +179,26 @@ export const VehicleManagementView: React.FC = () => {
                     <td className="p-3 font-semibold text-gray-200">{veh.owner}</td>
                     <td className="p-3 text-gray-300">{veh.driver}</td>
                     <td className="p-3">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          veh.category === 'RZ Mining'
-                            ? 'bg-[#d4af37]/15 text-[#f3c64c] border border-[#d4af37]/30'
-                            : 'bg-blue-900/20 text-blue-400 border border-blue-700/30'
-                        }`}
-                      >
-                        {veh.category}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            veh.category === 'RZ Mining'
+                              ? 'bg-[#d4af37]/15 text-[#f3c64c] border border-[#d4af37]/30'
+                              : 'bg-blue-900/20 text-blue-400 border border-blue-700/30'
+                          }`}
+                        >
+                          {veh.category}
+                        </span>
+                        <span
+                          className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase ${
+                            (veh.ownerType || (veh.category === 'RZ Mining' ? 'COMPANY' : 'OUTSIDE')) === 'COMPANY'
+                              ? 'bg-amber-950/70 text-amber-300 border border-amber-800/40'
+                              : 'bg-sky-950/70 text-sky-300 border border-sky-800/40'
+                          }`}
+                        >
+                          {veh.ownerType || (veh.category === 'RZ Mining' ? 'COMPANY' : 'OUTSIDE')}
+                        </span>
+                      </div>
                     </td>
                     <td className="p-3 font-mono text-gray-300">{veh.capacity} pcs</td>
                     <td className="p-3">

@@ -1,10 +1,10 @@
-export type AppUser = 'Nafid' | 'Aflah' | 'Sulthan';
+export type AppUser = 'Nafid' | 'Aflah';
 
 export interface GoogleAuthUser {
-  id: string; // Google User ID / sub
+  id: string;
   email: string;
-  name: string; // Full display name
-  shortName: 'Nafid' | 'Aflah' | 'Sulthan'; // Standard operator name
+  name: string;
+  shortName: AppUser;
   picture?: string;
   verifiedAt: string;
 }
@@ -62,12 +62,15 @@ export type IncomeCategory =
   | 'Other Income'
   | 'Other Receipts';
 
+export type VehicleOwnerType = 'COMPANY' | 'OUTSIDE';
+
 export interface Vehicle extends AuditFields {
   id: string;
   vehicleNumber: string;
   owner: string;
   driver: string;
   category: VehicleCategory;
+  ownerType?: VehicleOwnerType; // 'COMPANY' or 'OUTSIDE'
   capacity: number; // in pcs or loads (default 250)
   status: 'Available' | 'On Trip' | 'Maintenance';
   active: boolean;
@@ -236,9 +239,251 @@ export interface LoadOrder extends AuditFields {
   gatePassNumber?: string;
   gatePassConfirmedAt?: string;
 
+  // Order Module Extensions
+  agentName?: string; // Orderman / Agent name
+  paymentTerms?: string; // "Cash on Delivery", "Credit - 7 Days", etc.
+  deliveryAddress?: string;
+  commissionPaid?: boolean;
+
   enteredBy: AppUser;
   remarks?: string;
   createdAt: string;
+}
+
+export interface OrdermanAgent {
+  id: string;
+  name: string;
+  phone: string;
+  defaultCommissionPerUnit: number; // e.g. ₹250 per load or ₹1 per stone
+  totalOrders: number;
+  totalCommissionEarned: number;
+  totalCommissionPaid: number;
+  balanceDue: number;
+  remarks?: string;
+}
+
+// --------------------------------------------------------------------------
+// RZ MINETRIX — LATERITE STONE ORDER MANAGEMENT WORKFLOW
+// ORDER → VEHICLE ASSIGNMENT → GATE ENTRY → LOADING → DISPATCH → DELIVERY → BILL → PAYMENT → SETTLEMENT
+// --------------------------------------------------------------------------
+
+export type OrderStatus =
+  | 'NEW'
+  | 'CONFIRMED'
+  | 'ALLOCATED'
+  | 'READY FOR LOADING'
+  | 'LOADING'
+  | 'DISPATCHED'
+  | 'DELIVERED'
+  | 'PAYMENT PENDING'
+  | 'PARTIALLY PAID'
+  | 'PAID'
+  | 'CANCELLED';
+
+export type OrderPaymentTerms =
+  | 'IMMEDIATE'
+  | 'DAILY'
+  | 'WEEKLY'
+  | 'CUSTOM';
+
+export interface StoneOrder extends AuditFields {
+  id: string;
+  orderId: string; // e.g., ORD-2026-101
+  orderDate: string; // YYYY-MM-DD
+  customer: string;
+  customerId: string;
+  customerPhone: string;
+  deliveryLocation: string;
+  agentName: string; // Orderman / Agent
+  quality: MaterialType;
+  quantity: number;
+  unit: 'pcs' | 'load';
+  rate: number;
+  grossAmount: number; // quantity * rate (or load rate)
+  commission: number; // Orderman commission
+  paymentTerms: OrderPaymentTerms;
+  assignedVehicle?: string; // Assigned Vehicle Number
+  driver?: string;
+  requiredDate: string; // Required Delivery Date
+  remarks?: string;
+  status: OrderStatus;
+
+  // Integrated Workflow linkages (prevents duplicate data creation)
+  loadId?: string; // Auto-linked to Load record
+  gatePassId?: string; // Auto-linked Gate Pass record
+  gatePassNumber?: string;
+  gateEntryTime?: string;
+  loadingStartTime?: string;
+  loadingEndTime?: string;
+  dispatchTime?: string;
+  deliveryTime?: string;
+  billNumber?: string;
+  billDate?: string;
+  paymentReceived: number;
+  balance: number;
+  settledDate?: string;
+  enteredBy: AppUser;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type RotationTurnStatus =
+  | 'Waiting'
+  | 'In Pit'
+  | 'Loading'
+  | 'Dispatched'
+  | 'Delivered'
+  | 'Returned'
+  | 'Standby'
+  | 'Maintenance';
+
+export interface DailyRotationEntry {
+  position: number; // Position 1 = FIXED (RZ MINING), 2 onward = Rotating vehicles
+  vehicleId: string;
+  vehicleNumber: string;
+  owner: string; // Separate owner entity
+  driver: string; // Separate driver entity
+  category: VehicleCategory;
+  capacity?: number;
+  status: RotationTurnStatus;
+  isFixed: boolean; // TRUE for Position 1 (RZ MINING)
+  entryTime?: string;
+  remarks?: string;
+  lastTrip?: string;
+}
+
+export interface DailyRotation extends AuditFields {
+  id: string;
+  rotationDate: string; // YYYY-MM-DD
+  rotationNumber: number; // Cycle sequence number
+  entries: DailyRotationEntry[];
+  status: 'Active' | 'Completed' | 'Draft';
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// --------------------------------------------------------------------------
+// RZ MINETRIX — UNIFIED VEHICLE ACCOUNTING ENGINE MODEL
+// Company-owned vehicles and outside-owned vehicles use the SAME accounting structure.
+// Identical transaction model, only ownerType: 'COMPANY' | 'OUTSIDE' differs.
+// --------------------------------------------------------------------------
+
+export type VehicleIncomeCategory =
+  | 'Trip income'
+  | 'Delivery income'
+  | 'Other income';
+
+export type VehicleExpenseCategory =
+  | 'Fuel'
+  | 'Driver payment'
+  | 'Loading'
+  | 'Repair'
+  | 'Maintenance'
+  | 'Tyre'
+  | 'Toll'
+  | 'Other vehicle expenses';
+
+export type VehicleReceivableCategory =
+  | 'Customer pending'
+  | 'Driver collection pending';
+
+export type VehiclePayableCategory =
+  | 'Driver'
+  | 'Owner'
+  | 'Other party';
+
+export type VehicleTransactionType = 'Income' | 'Expense' | 'Receivable' | 'Payable';
+
+export interface VehicleTransaction extends AuditFields {
+  id: string;
+  date: string;
+  time?: string;
+  vehicleNumber: string;
+  ownerType: VehicleOwnerType; // Immutable at time of transaction
+  type: VehicleTransactionType;
+  category:
+    | VehicleIncomeCategory
+    | VehicleExpenseCategory
+    | VehicleReceivableCategory
+    | VehiclePayableCategory;
+  description: string;
+  amount: number;
+  status: 'Cleared' | 'Pending' | 'Settled';
+  referenceId?: string; // e.g., LD-1001, GP-000001, EXP-101
+  counterParty?: string; // Driver name, Owner name, Customer name, Vendor name
+  paymentMode?: PaymentMode;
+  enteredBy: AppUser;
+  createdAt: string;
+}
+
+export interface VehicleAccountIncome {
+  tripIncome: number;
+  deliveryIncome: number;
+  otherIncome: number;
+  totalIncome: number;
+}
+
+export interface VehicleAccountExpenses {
+  fuel: number;
+  driverPayment: number;
+  loading: number;
+  repair: number;
+  maintenance: number;
+  tyre: number;
+  toll: number;
+  otherVehicleExpenses: number;
+  totalExpenses: number;
+}
+
+export interface VehicleAccountReceivables {
+  customerPending: number;
+  driverCollectionPending: number;
+  totalReceivables: number;
+}
+
+export interface VehicleAccountPayables {
+  driver: number;
+  owner: number;
+  otherParty: number;
+  totalPayables: number;
+}
+
+export interface VehicleAccount {
+  vehicleId: string;
+  vehicleNumber: string;
+  owner: string;
+  driver: string;
+  ownerType: VehicleOwnerType; // 'COMPANY' or 'OUTSIDE'
+  category: VehicleCategory;
+  capacity: number;
+  status: string;
+
+  // Breakdown
+  income: VehicleAccountIncome;
+  expenses: VehicleAccountExpenses;
+  receivables: VehicleAccountReceivables;
+  payables: VehicleAccountPayables;
+
+  // Unified Identical Calculations
+  netOperatingProfit: number; // totalIncome - totalExpenses
+  netBalance: number; // (totalIncome + totalReceivables) - (totalExpenses + totalPayables)
+  totalTrips: number;
+  totalStoneQty: number;
+  transactions: VehicleTransaction[];
+}
+
+export interface VehicleRotationItem {
+  id: string;
+  vehicleNumber: string;
+  driverName: string;
+  owner: string;
+  category: VehicleCategory;
+  capacity: number;
+  queueNumber: number;
+  status: 'Waiting' | 'In Pit' | 'Loading' | 'Dispatched' | 'Returned';
+  entryTime: string;
+  lastTripTime?: string;
 }
 
 export interface GatePass extends AuditFields {

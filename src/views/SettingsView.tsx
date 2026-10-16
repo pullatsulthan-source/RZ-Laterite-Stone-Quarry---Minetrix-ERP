@@ -1,30 +1,27 @@
 import React, { useState } from 'react';
 import { useQuarry } from '../context/QuarryContext';
-import { useAuth } from '../context/AuthContext';
 import {
   Settings,
   Download,
   Upload,
   RotateCcw,
   UserCheck,
-  ShieldCheck,
   CheckCircle2,
   AlertTriangle,
-  LogOut,
   Database,
   Cloud,
 } from 'lucide-react';
 import { Logo } from '../components/common/Logo';
+import { AppUser } from '../types/quarry';
 
 export const SettingsView: React.FC = () => {
   const {
     currentUser,
+    setCurrentUser,
     exportBackupJSON,
     importBackupJSON,
     resetAllData,
   } = useQuarry();
-
-  const { user, signOut } = useAuth();
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState(false);
@@ -84,7 +81,7 @@ export const SettingsView: React.FC = () => {
             </h2>
           </div>
           <p className="text-xs text-gray-400 mt-0.5">
-            Single quarry operations configuration, Google verified identity & persistent shared database
+            Single quarry operations configuration & persistent shared operations database
           </p>
         </div>
       </div>
@@ -93,77 +90,90 @@ export const SettingsView: React.FC = () => {
       <div className="p-6 rounded-2xl bg-gradient-to-r from-[#141722] via-[#0e1017] to-[#12141c] border border-[#d4af37]/40 flex flex-col sm:flex-row items-center justify-between gap-4">
         <Logo size="lg" />
         <div className="text-right text-xs text-gray-400">
-          <span className="font-mono font-bold text-[#f3c64c] block">VERSION 2.0.0 PROD</span>
-          <span>Google Verified • Shared Backend Multi-Device Sync</span>
+          <span className="font-mono font-bold text-[#f3c64c] block">DIRECT ACCESS MODE</span>
+          <span>Internal Quarry Operations • Shared Persistent Database</span>
         </div>
       </div>
 
-      {/* Verified Google Account Section */}
+      {/* Internal Quarry Operators Section */}
       <div className="p-5 rounded-2xl bg-[#12141a] border border-[#232736] space-y-4">
         <div className="border-b border-[#232736] pb-3 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <UserCheck className="w-4 h-4 text-[#d4af37]" />
               <h3 className="font-cinzel font-bold text-sm text-gray-100">
-                Verified Google Account Identity
+                Internal Quarry Operators
               </h3>
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
-              Only authorized Google accounts are permitted. "Entered By" is strictly locked to your verified identity.
+              Direct access mode active without login screens. Shared between 2 internal operators.
             </p>
           </div>
 
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            AUTHENTICATED
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#d4af37]/20 text-[#f3c64c] border border-[#d4af37]/30">
+            DIRECT ACCESS
           </span>
         </div>
 
         <div className="p-4 rounded-xl bg-[#0b0d12] border border-[#1f2434] flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            {user?.picture ? (
-              <img
-                src={user.picture}
-                alt={user.name}
-                className="w-12 h-12 rounded-full object-cover border-2 border-[#d4af37]"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-[#d4af37] text-black font-black flex items-center justify-center text-lg shadow">
-                {currentUser[0]}
-              </div>
-            )}
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#d4af37] to-[#9c7816] text-[#090a0d] font-black flex items-center justify-center text-lg shadow">
+              {currentUser[0]}
+            </div>
             <div>
               <span className="font-bold text-sm text-gray-100 block">
-                {user?.name || (currentUser === 'Nafid' ? 'Nafid Khan' : 'Aflah RZ')}
+                {currentUser === 'Nafid' ? 'Nafid Khan' : 'Aflah RZ'}
               </span>
               <span className="text-xs text-gray-400 font-mono block">
-                {user?.email || (currentUser === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com')}
+                {currentUser === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com'}
               </span>
               <span className="text-[10px] text-[#d4af37] font-semibold mt-0.5 block">
-                Entered By Operator: <b>{currentUser}</b> (Locked to Account)
+                Current Active Operator: <b>{currentUser}</b> (Records Loads & Gate Passes)
               </span>
             </div>
           </div>
 
-          <button
-            onClick={signOut}
-            className="px-4 py-2 rounded-xl bg-rose-950/30 hover:bg-rose-950/50 text-rose-300 border border-rose-900/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Switch Google Account</span>
-          </button>
+          {/* Quick toggle operator */}
+          <div className="flex items-center gap-2 bg-[#12141c] p-1.5 rounded-xl border border-[#262b3a]">
+            {(['Nafid', 'Aflah'] as AppUser[]).map((op) => (
+              <button
+                key={op}
+                type="button"
+                onClick={() => setCurrentUser(op)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  currentUser === op
+                    ? 'bg-[#d4af37] text-black shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Switch to {op}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Authorized Allowlist Details */}
+        {/* 2 Operators Info */}
         <div className="p-3 rounded-xl bg-[#0d0f14] border border-[#1b1f2b] text-xs space-y-2">
-          <span className="text-gray-400 font-semibold block">Configured Allowlist:</span>
+          <span className="text-gray-400 font-semibold block">Designated Internal Quarry Personnel:</span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
-            <div className="p-2 rounded bg-[#131620] border border-[#222736] flex items-center justify-between">
-              <span className="text-gray-300">nafidkhan@racezoneventures.com</span>
-              <span className="text-[#d4af37] font-bold">Nafid</span>
+            <div className={`p-2.5 rounded-xl border transition-all ${currentUser === 'Nafid' ? 'bg-[#181a24] border-[#d4af37]/40' : 'bg-[#131620] border-[#222736]'}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-200 font-bold">Nafid Khan</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentUser === 'Nafid' ? 'bg-[#d4af37] text-black font-black' : 'text-gray-500'}`}>
+                  {currentUser === 'Nafid' ? 'ACTIVE' : 'Operator 1'}
+                </span>
+              </div>
+              <span className="text-gray-400 text-[10px] block mt-0.5">nafidkhan@racezoneventures.com</span>
             </div>
-            <div className="p-2 rounded bg-[#131620] border border-[#222736] flex items-center justify-between">
-              <span className="text-gray-300">aflah@racezoneventures.com</span>
-              <span className="text-[#d4af37] font-bold">Aflah</span>
+
+            <div className={`p-2.5 rounded-xl border transition-all ${currentUser === 'Aflah' ? 'bg-[#181a24] border-[#d4af37]/40' : 'bg-[#131620] border-[#222736]'}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-200 font-bold">Aflah RZ</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${currentUser === 'Aflah' ? 'bg-[#d4af37] text-black font-black' : 'text-gray-500'}`}>
+                  {currentUser === 'Aflah' ? 'ACTIVE' : 'Operator 2'}
+                </span>
+              </div>
+              <span className="text-gray-400 text-[10px] block mt-0.5">aflah@racezoneventures.com</span>
             </div>
           </div>
         </div>

@@ -31,6 +31,41 @@ export function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+export function getPreviousDateString(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() - 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+export function getNextDateString(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+export function formatDayName(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', { weekday: 'short' });
+  } catch {
+    return '';
+  }
+}
+
 export function getCurrentTimeString(): string {
   const d = new Date();
   let hours = d.getHours();

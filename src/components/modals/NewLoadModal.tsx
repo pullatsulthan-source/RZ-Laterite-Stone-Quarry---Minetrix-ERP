@@ -21,10 +21,14 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
     customers,
     rates,
     currentUser,
+    stock,
     createLoad,
     confirmAndGenerateGatePass,
+    orders,
+    dispatchOrder,
   } = useQuarry();
 
+  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [vehicleId, setVehicleId] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [owner, setOwner] = useState('');
@@ -35,11 +39,49 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [destination, setDestination] = useState('');
 
+  const [agentName, setAgentName] = useState('Direct Order');
+  const [paymentTerms, setPaymentTerms] = useState('Cash on Delivery');
+  const [customRate, setCustomRate] = useState<number | null>(null);
+
   const [material, setMaterial] = useState<MaterialType>('Laterite Stone — 1st');
   const [quantity, setQuantity] = useState<number>(250);
   const [paymentReceived, setPaymentReceived] = useState<number>(0);
   const [remarks, setRemarks] = useState('');
   const [immediateGatePass, setImmediateGatePass] = useState(true);
+
+  // When order is selected: Auto-populate Customer, Quality, Quantity, Rate, Delivery Location & Payment Terms
+  const handleOrderSelect = (ordId: string) => {
+    setSelectedOrderId(ordId);
+    if (!ordId) {
+      setCustomRate(null);
+      return;
+    }
+
+    const ord = orders.find((o) => o.id === ordId || o.orderId === ordId);
+    if (ord) {
+      if (ord.customerId) setCustomerId(ord.customerId);
+      if (ord.customer) setCustomerName(ord.customer);
+      if (ord.deliveryLocation) setDestination(ord.deliveryLocation);
+      if (ord.quality) handleMaterialChange(ord.quality);
+      if (ord.quantity) setQuantity(ord.quantity);
+      if (ord.rate) setCustomRate(ord.rate);
+      if (ord.agentName) setAgentName(ord.agentName);
+      if (ord.paymentTerms) setPaymentTerms(ord.paymentTerms);
+      if (ord.remarks) setRemarks(ord.remarks);
+
+      if (ord.assignedVehicle) {
+        const matchingVeh = vehicles.find(
+          (v) => v.vehicleNumber.trim().toUpperCase() === ord.assignedVehicle!.trim().toUpperCase()
+        );
+        if (matchingVeh) {
+          handleVehicleSelect(matchingVeh.id);
+        } else {
+          setVehicleNumber(ord.assignedVehicle);
+          if (ord.driver) setDriver(ord.driver);
+        }
+      }
+    }
+  };
 
   // Set defaults when opening
   useEffect(() => {
@@ -119,11 +161,10 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
   const quarryRate = rates.quarryRates[material]?.ratePerUnit || (is3rd ? 1000 : 43);
   const quarryAmount = is3rd ? quarryRate * quantity : quantity * quarryRate;
 
-  const rzRate = rates.rzCustomerRates[material]?.ratePerUnit || (is3rd ? 5000 : 65);
-  const customerSaleRate = vehicleCategory === 'RZ Mining' ? rzRate : quarryRate;
-  const customerSaleAmount = vehicleCategory === 'RZ Mining'
-    ? (is3rd ? rzRate * quantity : quantity * rzRate)
-    : quarryAmount;
+  const defaultRzRate = rates.rzCustomerRates[material]?.ratePerUnit || (is3rd ? 5000 : 65);
+  const customerSaleRate =
+    customRate !== null ? customRate : vehicleCategory === 'RZ Mining' ? defaultRzRate : quarryRate;
+  const customerSaleAmount = is3rd ? customerSaleRate * quantity : quantity * customerSaleRate;
 
   let driverBatta = 0;
   let vehicleTripRent = 0;
@@ -149,27 +190,39 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const created = createLoad({
-      vehicleNumber,
-      owner,
-      driver,
-      vehicleCategory,
-      customerId,
-      customerName,
-      destination,
-      material,
-      quantity,
-      paymentReceived: Number(paymentReceived) || 0,
-      remarks,
-      status: immediateGatePass ? 'Draft' : 'Loaded',
-    });
-
-    if (immediateGatePass) {
-      confirmAndGenerateGatePass(
-        created.id,
+    if (selectedOrderId) {
+      // Direct integration: Dispatches the existing booked order (NO duplicate data)
+      dispatchOrder(
+        selectedOrderId,
         Number(paymentReceived) || 0,
-        remarks || 'Gate Pass issued at load creation'
+        remarks || 'Gate Pass issued at dispatch'
       );
+    } else {
+      const created = createLoad({
+        vehicleNumber,
+        owner,
+        driver,
+        vehicleCategory,
+        customerId,
+        customerName,
+        destination,
+        material,
+        quantity,
+        customerSaleRate,
+        paymentReceived: Number(paymentReceived) || 0,
+        agentName,
+        paymentTerms,
+        remarks,
+        status: immediateGatePass ? 'Draft' : 'Loaded',
+      });
+
+      if (immediateGatePass) {
+        confirmAndGenerateGatePass(
+          created.id,
+          Number(paymentReceived) || 0,
+          remarks || 'Gate Pass issued at load creation'
+        );
+      }
     }
 
     onClose();
@@ -186,7 +239,7 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
             </div>
             <div>
               <h3 className="font-cinzel font-bold text-base text-gray-100 tracking-wide">
-                New Quarry Load / Order
+                New Quarry Load / Order Dispatch
               </h3>
               <p className="text-[11px] text-[#d4af37]/80">
                 Auto-calculates Quarry Purchase, Customer Sale, Fleet Expenses & Gate Pass
@@ -220,6 +273,52 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
                 <span className="text-[10px] text-gray-400 font-normal">(Verified)</span>
               </span>
             </div>
+          </div>
+
+          {/* Link to Existing Booked Order */}
+          <div className="p-3.5 rounded-xl bg-[#141824] border border-amber-500/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                <span>Select Booked Order (Auto-populates all details — Zero duplicate data)</span>
+              </label>
+              {selectedOrderId && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderId('')}
+                  className="text-[11px] text-gray-400 hover:text-rose-400 underline"
+                >
+                  Clear Selection
+                </button>
+              )}
+            </div>
+            <select
+              value={selectedOrderId}
+              onChange={(e) => handleOrderSelect(e.target.value)}
+              className="w-full bg-[#1b2030] border border-[#2e374f] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+            >
+              <option value="">-- No Linked Order (Direct Walk-in / Ad-hoc Dispatch) --</option>
+              {orders
+                .filter(
+                  (o) =>
+                    o.status !== 'DISPATCHED' &&
+                    o.status !== 'DELIVERED' &&
+                    o.status !== 'PAID' &&
+                    o.status !== 'CANCELLED'
+                )
+                .map((ord) => (
+                  <option key={ord.id} value={ord.id}>
+                    {ord.orderId} • {ord.customer} ({ord.quality} — {ord.quantity} pcs) • Status: {ord.status} • {ord.paymentTerms}
+                  </option>
+                ))}
+            </select>
+            {selectedOrderId && (
+              <div className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Order linked. Selecting this order auto-populates customer, quality, quantity, rate, location & payment terms without creating duplicate data.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Vehicle & Driver Section */}
@@ -309,41 +408,114 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
             </div>
           </div>
 
-          {/* Material & Quantity */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-[#0b0d12] rounded-xl border border-[#202535]">
-            <div className="sm:col-span-2">
+          {/* Material, Quantity & Sale Rate with Live Quarry Stock Check */}
+          <div className="space-y-2 p-3.5 bg-[#0b0d12] rounded-xl border border-[#202535]">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                  Stone Material / Quality *
+                </label>
+                <select
+                  value={material}
+                  onChange={(e) => handleMaterialChange(e.target.value as MaterialType)}
+                  className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-[#f3c64c] font-bold focus:outline-none focus:border-[#d4af37]"
+                >
+                  <option value="Laterite Stone — 1st">
+                    Laterite Stone — 1st (Std 250 pcs)
+                  </option>
+                  <option value="Laterite Stone — 2nd">
+                    Laterite Stone — 2nd (Std 250 pcs)
+                  </option>
+                  <option value="Laterite Stone — 3rd">
+                    Laterite Stone — 3rd (1 Load)
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                  Quantity ({is3rd ? 'load' : 'pcs'}) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Number(e.target.value) || 0)}
+                  className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-gray-100 font-mono font-bold focus:outline-none focus:border-[#d4af37]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center justify-between">
+                  <span>Sale Rate (₹)</span>
+                  {selectedOrderId && (
+                    <span className="text-[9px] text-amber-400 font-normal">From Order</span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="1"
+                  value={customerSaleRate}
+                  onChange={(e) => setCustomRate(Number(e.target.value) || 0)}
+                  className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-amber-400 font-mono font-bold focus:outline-none focus:border-[#d4af37]"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Quarry Stock Allocation Pipeline Status */}
+            <div className="pt-2 border-t border-[#1a1e2b] flex items-center justify-between text-xs">
+              <span className="text-gray-400">
+                Current Quarry Stock: <b className="text-white font-mono">{stock[material]} {is3rd ? 'loads' : 'pcs'}</b>
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                stock[material] >= quantity
+                  ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/50'
+                  : 'bg-amber-950/60 text-amber-400 border border-amber-800/50'
+              }`}>
+                {stock[material] >= quantity
+                  ? '✓ Quarry Stock Allocation Ready'
+                  : '⚡ Allocating from Ongoing Pit Production'}
+              </span>
+            </div>
+          </div>
+
+          {/* Orderman / Agent & Payment Terms */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
               <label className="block text-xs font-semibold text-gray-300 mb-1">
-                Stone Material / Quality *
+                Orderman / Sales Agent
               </label>
               <select
-                value={material}
-                onChange={(e) => handleMaterialChange(e.target.value as MaterialType)}
-                className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-[#f3c64c] font-bold focus:outline-none focus:border-[#d4af37]"
+                value={agentName}
+                onChange={(e) => setAgentName(e.target.value)}
+                className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-[#d4af37]"
               >
-                <option value="Laterite Stone — 1st">
-                  Laterite Stone — 1st (Std 250 pcs)
-                </option>
-                <option value="Laterite Stone — 2nd">
-                  Laterite Stone — 2nd (Std 250 pcs)
-                </option>
-                <option value="Laterite Stone — 3rd">
-                  Laterite Stone — 3rd (1 Load)
-                </option>
+                <option value="Direct Order">Direct Order (No Agent)</option>
+                <option value="Shafi (Agent)">Shafi (Agent — ₹250/load)</option>
+                <option value="Latheef (Agent)">Latheef (Agent — ₹250/load)</option>
+                <option value="Rasheed (Orderman)">Rasheed (Orderman — ₹250/load)</option>
+                <option value="Babu (Orderman)">Babu (Orderman — ₹250/load)</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-gray-300 mb-1">
-                Quantity ({is3rd ? 'load' : 'pcs'}) *
+                Payment Terms & Conditions
               </label>
-              <input
-                type="number"
-                min="1"
-                value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value) || 0)}
-                className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-gray-100 font-mono font-bold focus:outline-none focus:border-[#d4af37]"
-                required
-              />
+              <select
+                value={paymentTerms}
+                onChange={(e) => setPaymentTerms(e.target.value)}
+                className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-[#d4af37]"
+              >
+                <option value="Cash on Delivery">Cash on Delivery (COD by Driver)</option>
+                <option value="Immediate UPI / Bank">Immediate UPI / Bank Transfer</option>
+                <option value="Credit - 7 Days">Credit Terms: 7 Days</option>
+                <option value="Credit - 15 Days">Credit Terms: 15 Days</option>
+                <option value="Advance Paid in Full">Advance Paid in Full</option>
+              </select>
             </div>
           </div>
 

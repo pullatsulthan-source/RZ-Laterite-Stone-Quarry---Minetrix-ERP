@@ -19,6 +19,7 @@ import {
   Building2,
   CalendarCheck,
   Percent,
+  Repeat,
 } from 'lucide-react';
 import { NavTab } from '../components/common/Sidebar';
 
@@ -50,6 +51,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     customers,
     advances,
     currentUser,
+    rotations,
   } = useQuarry();
 
   const today = getTodayDateString();
@@ -204,6 +206,119 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <PackageCheck className="w-3.5 h-3.5 text-blue-400" />
             <span>Production</span>
           </button>
+        </div>
+      </div>
+
+      {/* CORE OPERATIONAL PIPELINE: QUARRY ➔ STOCK ➔ ORDER ➔ VEHICLE ➔ DISPATCH ➔ PAYMENT */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#0f1118] border border-[#232736] space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1f2434] pb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
+            <h3 className="font-cinzel text-xs sm:text-sm font-bold text-gray-200 uppercase tracking-wider">
+              Core Operational Pipeline & Shared Transaction Architecture
+            </h3>
+          </div>
+          <span className="text-[11px] text-gray-400">
+            Automated data flow: Zero manual re-entry across modules
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+          {/* Step 1: Quarry */}
+          <div
+            onClick={() => onNavigate('production')}
+            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-[#d4af37]/40 cursor-pointer transition-all group"
+          >
+            <div className="flex items-center justify-between text-[10px] text-[#f3c64c] font-bold uppercase mb-1">
+              <span>1. Quarry</span>
+              <span className="text-gray-500 group-hover:text-white">➔</span>
+            </div>
+            <div className="font-bold text-gray-200 truncate">Pit Production</div>
+            <div className="text-xs font-mono font-bold text-[#d4af37] mt-1">
+              {metrics.todayProductionPcs.toLocaleString()} pcs
+            </div>
+            <div className="text-[9px] text-gray-500">Adds to Stock</div>
+          </div>
+
+          {/* Step 2: Stock */}
+          <div
+            onClick={() => onNavigate('stock')}
+            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-[#d4af37]/40 cursor-pointer transition-all group"
+          >
+            <div className="flex items-center justify-between text-[10px] text-[#f3c64c] font-bold uppercase mb-1">
+              <span>2. Stock</span>
+              <span className="text-gray-500 group-hover:text-white">➔</span>
+            </div>
+            <div className="font-bold text-gray-200 truncate">Inventory Pit</div>
+            <div className="text-xs font-mono font-bold text-[#d4af37] mt-1">
+              {(stock['Laterite Stone — 1st'] + stock['Laterite Stone — 2nd']).toLocaleString()} pcs
+            </div>
+            <div className="text-[9px] text-gray-500">Ready for Orders</div>
+          </div>
+
+          {/* Step 3: Order */}
+          <div
+            onClick={() => onNavigate('loads')}
+            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-emerald-500/40 cursor-pointer transition-all group"
+          >
+            <div className="flex items-center justify-between text-[10px] text-emerald-400 font-bold uppercase mb-1">
+              <span>3. Order</span>
+              <span className="text-gray-500 group-hover:text-white">➔</span>
+            </div>
+            <div className="font-bold text-gray-200 truncate">Stock Allocation</div>
+            <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
+              {loads.filter(l => l.status === 'Draft' || l.status === 'Loaded').length} Booked
+            </div>
+            <div className="text-[9px] text-gray-500">Assigns Truck/Driver</div>
+          </div>
+
+          {/* Step 4: Vehicle & Driver */}
+          <div
+            onClick={() => onNavigate('vehicles')}
+            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-sky-500/40 cursor-pointer transition-all group"
+          >
+            <div className="flex items-center justify-between text-[10px] text-sky-400 font-bold uppercase mb-1">
+              <span>4. Fleet</span>
+              <span className="text-gray-500 group-hover:text-white">➔</span>
+            </div>
+            <div className="font-bold text-gray-200 truncate">Vehicle & Driver</div>
+            <div className="text-xs font-mono font-bold text-sky-400 mt-1">
+              {loads.filter(l => l.vehicleCategory === 'RZ Mining').length} RZ Trips
+            </div>
+            <div className="text-[9px] text-gray-500">Pit Rotation Queue</div>
+          </div>
+
+          {/* Step 5: Dispatch */}
+          <div
+            onClick={() => onNavigate('gate_pass')}
+            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-[#d4af37]/40 cursor-pointer transition-all group"
+          >
+            <div className="flex items-center justify-between text-[10px] text-[#f3c64c] font-bold uppercase mb-1">
+              <span>5. Dispatch</span>
+              <span className="text-gray-500 group-hover:text-white">➔</span>
+            </div>
+            <div className="font-bold text-gray-200 truncate">Gate Pass Issued</div>
+            <div className="text-xs font-mono font-bold text-[#f3c64c] mt-1">
+              {gatePasses.length} Dispatched
+            </div>
+            <div className="text-[9px] text-gray-500">Deducts Stock & Out</div>
+          </div>
+
+          {/* Step 6: Delivery & Payment */}
+          <div
+            onClick={() => onNavigate('payments')}
+            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-emerald-500/40 cursor-pointer transition-all group"
+          >
+            <div className="flex items-center justify-between text-[10px] text-emerald-400 font-bold uppercase mb-1">
+              <span>6. Settlement</span>
+              <span className="text-emerald-400">✓</span>
+            </div>
+            <div className="font-bold text-gray-200 truncate">Site Delivery</div>
+            <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
+              {formatCurrency(metrics.customerCollections)}
+            </div>
+            <div className="text-[9px] text-gray-500">Driver/Client Payment</div>
+          </div>
         </div>
       </div>
 
@@ -579,6 +694,71 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Daily Vehicle Rotation Turn Card */}
+          {(() => {
+            const todayRotation = (rotations || []).find((r) => r.rotationDate === today) || rotations?.[0];
+            const fixedUnit = todayRotation?.entries?.find((e) => e.isFixed) || todayRotation?.entries?.[0];
+            const nextUnit = todayRotation?.entries?.find((e) => !e.isFixed) || todayRotation?.entries?.[1];
+
+            return (
+              <div className="bg-[#12141a] rounded-2xl border border-amber-500/30 p-4 sm:p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Repeat className="w-4 h-4 text-amber-400" />
+                    <h3 className="font-cinzel font-bold text-sm text-gray-200">
+                      Vehicle Rotation Engine
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => onNavigate('rotation')}
+                    className="text-[11px] text-amber-400 hover:underline font-bold cursor-pointer"
+                  >
+                    View Queue →
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="p-2.5 rounded-xl bg-gradient-to-r from-[#17130a] to-[#121008] border border-amber-500/40 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-black">
+                        #1 FIXED
+                      </span>
+                      <span className="text-xs font-mono font-bold text-white">
+                        {fixedUnit?.vehicleNumber || 'KL-55-RZ-01'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-amber-300">
+                      RZ MINING
+                    </span>
+                  </div>
+
+                  {nextUnit && (
+                    <div className="p-2.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-900/60 text-blue-300 border border-blue-800">
+                          #{nextUnit.position || 2} NEXT
+                        </span>
+                        <span className="text-xs font-mono font-bold text-white">
+                          {nextUnit.vehicleNumber}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-gray-400">
+                        {nextUnit.driver} ({nextUnit.owner})
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-1 text-[11px] text-gray-400 border-t border-[#1e2332]">
+                  <span>Cycle #{todayRotation?.rotationNumber || 11}</span>
+                  <span className="text-amber-400/90 font-mono">
+                    {todayRotation?.entries?.length || 7} Trucks in Queue
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Quick Nav Launchpad */}
           <div className="bg-[#12141a] rounded-2xl border border-[#232736] p-4 sm:p-5 shadow-sm space-y-3">

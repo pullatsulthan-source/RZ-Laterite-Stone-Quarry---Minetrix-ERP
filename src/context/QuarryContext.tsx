@@ -20,6 +20,14 @@ import {
   PaymentMode,
   GoogleAuthUser,
   SavedStatement,
+  DailyRotation,
+  DailyRotationEntry,
+  RotationTurnStatus,
+  VehicleTransaction,
+  VehicleOwnerType,
+  StoneOrder,
+  OrderStatus,
+  OrderPaymentTerms,
 } from '../types/quarry';
 import {
   INITIAL_RATES,
@@ -37,12 +45,16 @@ import {
   INITIAL_ADVANCES,
   INITIAL_STOCK,
   INITIAL_STATEMENTS,
+  INITIAL_ROTATIONS,
+  INITIAL_VEHICLE_TRANSACTIONS,
+  INITIAL_ORDERS,
+  generateNextRotationEngine,
 } from '../data/seedData';
 import { padGatePassNumber, padLoadNumber, getTodayDateString, getCurrentTimeString } from '../utils/formatters';
-import { useAuth } from './AuthContext';
 
 interface QuarryContextType {
   currentUser: AppUser;
+  setCurrentUser: (user: AppUser) => void;
   authUser: GoogleAuthUser | null;
 
   vehicles: Vehicle[];
@@ -61,6 +73,9 @@ interface QuarryContextType {
   expenses: QuarryExpense[];
   payments: CustomerPayment[];
   statements: SavedStatement[];
+  rotations: DailyRotation[];
+  vehicleTransactions: VehicleTransaction[];
+  orders: StoneOrder[];
 
   // Computed Stock
   stock: Record<MaterialType, number>;
@@ -111,6 +126,27 @@ interface QuarryContextType {
   updateRates: (newRates: RateConfig) => void;
   saveStatement: (stmt: Omit<SavedStatement, 'id' | 'createdAt'> & { id?: string }) => Promise<SavedStatement>;
   deleteStatement: (id: string) => Promise<void>;
+
+  // Vehicle Rotation Engine Actions
+  getRotationForDate: (date: string) => DailyRotation | null;
+  saveRotation: (rotation: DailyRotation) => void;
+  advanceRotation: (targetDate?: string) => DailyRotation;
+  updateRotationItemStatus: (date: string, position: number, status: RotationTurnStatus, remarks?: string) => void;
+
+  // Unified Vehicle Accounting Actions
+  addVehicleTransaction: (txn: Omit<VehicleTransaction, 'id' | 'createdAt'> & { id?: string }) => Promise<VehicleTransaction>;
+  updateVehicleTransaction: (id: string, updates: Partial<VehicleTransaction>) => Promise<void>;
+  deleteVehicleTransaction: (id: string) => Promise<void>;
+  updateVehicleOwnerType: (vehicleNumber: string, ownerType: VehicleOwnerType, newOwner?: string) => Promise<void>;
+
+  // Complete Order Management Workflow Actions
+  createOrder: (orderData: Partial<StoneOrder>) => StoneOrder;
+  updateOrder: (id: string, updates: Partial<StoneOrder>) => void;
+  deleteOrder: (id: string) => void;
+  advanceOrderWorkflow: (orderId: string, nextStatus: OrderStatus, extraData?: Partial<StoneOrder>) => void;
+  assignVehicleToOrder: (orderId: string, vehicleNumber: string, driverName?: string) => void;
+  dispatchOrder: (orderId: string, paymentReceived?: number, remarks?: string) => GatePass;
+
   resetAllData: () => void;
   exportBackupJSON: () => string;
   importBackupJSON: (jsonStr: string) => boolean;
@@ -122,11 +158,28 @@ const QuarryContext = createContext<QuarryContextType | null>(null);
 const STORAGE_KEY = 'rz_minetrix_quarry_cache_v2';
 
 export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  // Direct active operator between the 2 internal quarry operators (Nafid & Aflah)
+  const [currentUser, setCurrentUserState] = useState<AppUser>(() => {
+    const saved = localStorage.getItem('rz_active_operator');
+    return saved === 'Aflah' ? 'Aflah' : 'Nafid';
+  });
 
-  // Derived user identity strictly from verified Google user
-  const currentUser: AppUser = user?.shortName || 'Nafid';
-  const authUser = user;
+  const setCurrentUser = useCallback((user: AppUser) => {
+    setCurrentUserState(user);
+    localStorage.setItem('rz_active_operator', user);
+  }, []);
+
+  const authUser: GoogleAuthUser = useMemo(() => ({
+    id: currentUser === 'Nafid' ? 'op_nafid_rz' : 'op_aflah_rz',
+    name: currentUser === 'Nafid' ? 'Nafid Khan' : 'Aflah RZ',
+    shortName: currentUser,
+    email: currentUser === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com',
+    picture:
+      currentUser === 'Nafid'
+        ? 'https://ui-avatars.com/api/?name=Nafid+Khan&background=d4af37&color=090a0d&bold=true'
+        : 'https://ui-avatars.com/api/?name=Aflah+RZ&background=d4af37&color=090a0d&bold=true',
+    verifiedAt: new Date().toISOString(),
+  }), [currentUser]);
 
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -211,6 +264,21 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : (INITIAL_STATEMENTS || []);
   });
 
+  const [rotations, setRotations] = useState<DailyRotation[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_rotations`);
+    return saved ? JSON.parse(saved) : INITIAL_ROTATIONS;
+  });
+
+  const [vehicleTransactions, setVehicleTransactions] = useState<VehicleTransaction[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_vehicle_transactions`);
+    return saved ? JSON.parse(saved) : (INITIAL_VEHICLE_TRANSACTIONS || []);
+  });
+
+  const [orders, setOrders] = useState<StoneOrder[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_orders`);
+    return saved ? JSON.parse(saved) : (INITIAL_ORDERS || []);
+  });
+
   // Sync state to local cache for instant offline fallback
   useEffect(() => {
     try {
@@ -230,6 +298,9 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       localStorage.setItem(`${STORAGE_KEY}_expenses`, JSON.stringify(expenses));
       localStorage.setItem(`${STORAGE_KEY}_payments`, JSON.stringify(payments));
       localStorage.setItem(`${STORAGE_KEY}_statements`, JSON.stringify(statements));
+      localStorage.setItem(`${STORAGE_KEY}_rotations`, JSON.stringify(rotations));
+      localStorage.setItem(`${STORAGE_KEY}_vehicle_transactions`, JSON.stringify(vehicleTransactions));
+      localStorage.setItem(`${STORAGE_KEY}_orders`, JSON.stringify(orders));
     } catch (e) {
       console.warn('Cache error:', e);
     }
@@ -250,6 +321,9 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     expenses,
     payments,
     statements,
+    rotations,
+    vehicleTransactions,
+    orders,
   ]);
 
   // Refresh data from shared backend database
@@ -274,6 +348,15 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (backendDb.expenses) setExpenses(backendDb.expenses);
         if (backendDb.payments) setPayments(backendDb.payments);
         if (backendDb.statements) setStatements(backendDb.statements);
+        if (backendDb.rotations && Array.isArray(backendDb.rotations) && backendDb.rotations.length > 0) {
+          setRotations(backendDb.rotations);
+        }
+        if (backendDb.vehicleTransactions && Array.isArray(backendDb.vehicleTransactions) && backendDb.vehicleTransactions.length > 0) {
+          setVehicleTransactions(backendDb.vehicleTransactions);
+        }
+        if (backendDb.orders && Array.isArray(backendDb.orders) && backendDb.orders.length > 0) {
+          setOrders(backendDb.orders);
+        }
       }
     } catch (err) {
       // Backend polling error ignored in transient offline
@@ -1118,6 +1201,10 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setStatements(INITIAL_STATEMENTS || []);
     localStorage.clear();
 
+    setRotations(INITIAL_ROTATIONS);
+    setVehicleTransactions(INITIAL_VEHICLE_TRANSACTIONS);
+    setOrders(INITIAL_ORDERS);
+
     fetch('/api/reset', { method: 'POST' }).catch(console.error);
   };
 
@@ -1140,6 +1227,10 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       income,
       expenses,
       payments,
+      statements,
+      rotations,
+      vehicleTransactions,
+      orders,
     };
     return JSON.stringify(backup, null, 2);
   };
@@ -1162,6 +1253,10 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (data.income) setIncome(data.income);
       if (data.expenses) setExpenses(data.expenses);
       if (data.payments) setPayments(data.payments);
+      if (data.statements) setStatements(data.statements);
+      if (data.rotations) setRotations(data.rotations);
+      if (data.vehicleTransactions) setVehicleTransactions(data.vehicleTransactions);
+      if (data.orders) setOrders(data.orders);
 
       fetch('/api/import', {
         method: 'POST',
@@ -1176,10 +1271,444 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Unified Vehicle Accounting Engine Actions
+  const addVehicleTransaction = useCallback(
+    async (
+      txnData: Omit<VehicleTransaction, 'id' | 'createdAt'> & { id?: string }
+    ): Promise<VehicleTransaction> => {
+      const newTxn: VehicleTransaction = {
+        ...txnData,
+        id: txnData.id || `vtx-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        created_by_user_id:
+          authUser?.id || (currentUser === 'Aflah' ? 'goog_aflah_rz' : 'goog_nafid_rz'),
+        created_by_name: currentUser,
+        created_by_email:
+          authUser?.email ||
+          (currentUser === 'Aflah'
+            ? 'aflah@racezoneventures.com'
+            : 'nafidkhan@racezoneventures.com'),
+        created_at: new Date().toISOString(),
+      };
+
+      setVehicleTransactions((prev) => [newTxn, ...prev]);
+
+      try {
+        await fetch('/api/vehicle-transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newTxn),
+        });
+      } catch (err) {
+        console.error('Failed to post vehicle transaction:', err);
+      }
+
+      return newTxn;
+    },
+    [authUser, currentUser]
+  );
+
+  const updateVehicleTransaction = useCallback(
+    async (id: string, updates: Partial<VehicleTransaction>): Promise<void> => {
+      setVehicleTransactions((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
+      );
+
+      try {
+        await fetch(`/api/vehicle-transactions/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        });
+      } catch (err) {
+        console.error('Failed to update vehicle transaction:', err);
+      }
+    },
+    []
+  );
+
+  const deleteVehicleTransaction = useCallback(
+    async (id: string): Promise<void> => {
+      setVehicleTransactions((prev) => prev.filter((t) => t.id !== id));
+
+      try {
+        await fetch(`/api/vehicle-transactions/${id}`, { method: 'DELETE' });
+      } catch (err) {
+        console.error('Failed to delete vehicle transaction:', err);
+      }
+    },
+    []
+  );
+
+  const updateVehicleOwnerType = useCallback(
+    async (
+      vehicleNumber: string,
+      newOwnerType: VehicleOwnerType,
+      newOwner?: string
+    ): Promise<void> => {
+      // RULE: Historical transactions must NEVER change when vehicle owner type is changed!
+      // This strictly modifies only current vehicle entity metadata.
+      setVehicles((prev) =>
+        prev.map((v) => {
+          if (v.vehicleNumber.trim().toUpperCase() === vehicleNumber.trim().toUpperCase()) {
+            const updated: Vehicle = {
+              ...v,
+              ownerType: newOwnerType,
+              category: newOwnerType === 'COMPANY' ? 'RZ Mining' : 'Outside',
+              owner:
+                newOwner !== undefined
+                  ? newOwner
+                  : newOwnerType === 'COMPANY'
+                  ? 'RZ Mining'
+                  : v.owner,
+            };
+
+            fetch(`/api/vehicles/${v.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            }).catch(console.error);
+
+            return updated;
+          }
+          return v;
+        })
+      );
+    },
+    []
+  );
+
+  // Vehicle Rotation Engine Actions
+  const getRotationForDate = useCallback(
+    (date: string): DailyRotation | null => {
+      const found = rotations.find((r) => r.rotationDate === date);
+      if (found) return found;
+      return null;
+    },
+    [rotations]
+  );
+
+  const saveRotation = useCallback((rotation: DailyRotation) => {
+    setRotations((prev) => {
+      const idx = prev.findIndex(
+        (r) => r.id === rotation.id || r.rotationDate === rotation.rotationDate
+      );
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = rotation;
+        return next;
+      }
+      return [rotation, ...prev];
+    });
+
+    fetch('/api/rotations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rotation),
+    }).catch(console.error);
+  }, []);
+
+  const advanceRotation = useCallback(
+    (targetDate?: string): DailyRotation => {
+      const today = getTodayDateString();
+      const dateToUse = targetDate || today;
+
+      // Find the latest reference rotation:
+      // Check if one exists for the target date, or the most recent prior rotation
+      const existingForDate = rotations.find((r) => r.rotationDate === dateToUse);
+      const referenceRotation =
+        existingForDate ||
+        rotations[0] ||
+        INITIAL_ROTATIONS[0];
+
+      const nextCycleNumber = (referenceRotation?.rotationNumber || 10) + 1;
+      const nextRotation = generateNextRotationEngine(referenceRotation, dateToUse, nextCycleNumber);
+
+      saveRotation(nextRotation);
+      return nextRotation;
+    },
+    [rotations, saveRotation]
+  );
+
+  const updateRotationItemStatus = useCallback(
+    (
+      date: string,
+      position: number,
+      status: RotationTurnStatus,
+      remarks?: string
+    ) => {
+      setRotations((prev) => {
+        const target = prev.find((r) => r.rotationDate === date);
+        if (!target) return prev;
+        const updatedEntries = target.entries.map((entry) => {
+          if (entry.position === position) {
+            return {
+              ...entry,
+              status,
+              remarks: remarks !== undefined ? remarks : entry.remarks,
+            };
+          }
+          return entry;
+        });
+        const updatedRot = {
+          ...target,
+          entries: updatedEntries,
+          updatedAt: new Date().toISOString(),
+        };
+
+        fetch(`/api/rotations/${target.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedRot),
+        }).catch(console.error);
+
+        return prev.map((r) => (r.id === target.id ? updatedRot : r));
+      });
+    },
+    []
+  );
+
+  // Complete Order Management Workflow Actions
+  const createOrder = useCallback(
+    (orderData: Partial<StoneOrder>): StoneOrder => {
+      const year = new Date().getFullYear();
+      const nextOrderNumber = `ORD-${year}-${100 + orders.length + 1}`;
+      const rate =
+        orderData.rate ||
+        rates.rzCustomerRates[orderData.quality || 'Laterite Stone — 1st']?.ratePerUnit ||
+        65;
+      const quantity = orderData.quantity || 250;
+      const grossAmount =
+        orderData.grossAmount || (orderData.unit === 'load' ? rate : rate * quantity);
+      const paymentReceived = orderData.paymentReceived || 0;
+      const balance = grossAmount - paymentReceived;
+
+      const newOrder: StoneOrder = {
+        id: orderData.id || `ord-${Date.now()}`,
+        orderId: orderData.orderId || nextOrderNumber,
+        orderDate: orderData.orderDate || getTodayDateString(),
+        customerId: orderData.customerId || '',
+        customer: orderData.customer || '',
+        customerPhone: orderData.customerPhone || '',
+        deliveryLocation: orderData.deliveryLocation || '',
+        agentName: orderData.agentName || 'Direct Order',
+        quality: orderData.quality || 'Laterite Stone — 1st',
+        quantity,
+        unit: orderData.unit || 'pcs',
+        rate,
+        grossAmount,
+        commission:
+          orderData.commission !== undefined
+            ? orderData.commission
+            : orderData.unit === 'pcs'
+            ? quantity * 1
+            : 250,
+        paymentTerms: orderData.paymentTerms || 'IMMEDIATE',
+        assignedVehicle: orderData.assignedVehicle || undefined,
+        driver: orderData.driver || undefined,
+        requiredDate: orderData.requiredDate || getTodayDateString(),
+        remarks: orderData.remarks || '',
+        status: orderData.status || (orderData.assignedVehicle ? 'ALLOCATED' : 'NEW'),
+        paymentReceived,
+        balance,
+        enteredBy: currentUser,
+        createdAt: new Date().toISOString(),
+        created_by_user_id:
+          authUser?.id || (currentUser === 'Aflah' ? 'goog_aflah_rz' : 'goog_nafid_rz'),
+        created_by_name: currentUser,
+        created_by_email:
+          authUser?.email ||
+          (currentUser === 'Aflah'
+            ? 'aflah@racezoneventures.com'
+            : 'nafidkhan@racezoneventures.com'),
+      };
+
+      setOrders((prev) => [newOrder, ...prev]);
+
+      fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOrder),
+      }).catch(console.error);
+
+      return newOrder;
+    },
+    [orders, rates, currentUser, authUser]
+  );
+
+  const updateOrder = useCallback((id: string, updates: Partial<StoneOrder>) => {
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id === id || o.orderId === id) {
+          const grossAmount =
+            updates.grossAmount !== undefined
+              ? updates.grossAmount
+              : updates.rate && updates.quantity
+              ? updates.rate * updates.quantity
+              : o.grossAmount;
+          const paymentReceived =
+            updates.paymentReceived !== undefined ? updates.paymentReceived : o.paymentReceived;
+          const balance = grossAmount - paymentReceived;
+          const updated: StoneOrder = {
+            ...o,
+            ...updates,
+            grossAmount,
+            paymentReceived,
+            balance,
+            updatedAt: new Date().toISOString(),
+          };
+
+          fetch(`/api/orders/${o.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated),
+          }).catch(console.error);
+
+          return updated;
+        }
+        return o;
+      })
+    );
+  }, []);
+
+  const deleteOrder = useCallback((id: string) => {
+    setOrders((prev) => prev.filter((o) => o.id !== id && o.orderId !== id));
+    fetch(`/api/orders/${id}`, { method: 'DELETE' }).catch(console.error);
+  }, []);
+
+  const advanceOrderWorkflow = useCallback(
+    (orderId: string, nextStatus: OrderStatus, extraData?: Partial<StoneOrder>) => {
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId || o.orderId === orderId) {
+            const timeNow = getCurrentTimeString();
+            const timestamps: Partial<StoneOrder> = {};
+            if (nextStatus === 'READY FOR LOADING') timestamps.gateEntryTime = timeNow;
+            if (nextStatus === 'LOADING') timestamps.loadingStartTime = timeNow;
+            if (nextStatus === 'DISPATCHED') {
+              timestamps.loadingEndTime = o.loadingEndTime || timeNow;
+              timestamps.dispatchTime = timeNow;
+            }
+            if (nextStatus === 'DELIVERED') timestamps.deliveryTime = timeNow;
+            if (nextStatus === 'PAYMENT PENDING') {
+              timestamps.billNumber =
+                o.billNumber || `RZ-BILL-${Math.floor(1000 + Math.random() * 9000)}`;
+              timestamps.billDate = getTodayDateString();
+            }
+            if (nextStatus === 'PAID') timestamps.settledDate = getTodayDateString();
+
+            const updated: StoneOrder = {
+              ...o,
+              status: nextStatus,
+              ...timestamps,
+              ...(extraData || {}),
+              updatedAt: new Date().toISOString(),
+            };
+
+            fetch(`/api/orders/${o.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            }).catch(console.error);
+
+            return updated;
+          }
+          return o;
+        })
+      );
+    },
+    []
+  );
+
+  const assignVehicleToOrder = useCallback(
+    (orderId: string, vehicleNumber: string, driverName?: string) => {
+      const veh = vehicles.find(
+        (v) => v.vehicleNumber.trim().toUpperCase() === vehicleNumber.trim().toUpperCase()
+      );
+      const resolvedDriver = driverName || veh?.driver || '';
+      advanceOrderWorkflow(orderId, 'ALLOCATED', {
+        assignedVehicle: vehicleNumber,
+        driver: resolvedDriver,
+      });
+    },
+    [vehicles, advanceOrderWorkflow]
+  );
+
+  const dispatchOrder = useCallback(
+    (orderId: string, paymentReceived?: number, remarks?: string): GatePass => {
+      const order = orders.find((o) => o.id === orderId || o.orderId === orderId);
+      if (!order) throw new Error(`Order ${orderId} not found`);
+
+      const veh =
+        vehicles.find(
+          (v) =>
+            v.vehicleNumber.trim().toUpperCase() ===
+            (order.assignedVehicle || '').trim().toUpperCase()
+        ) || vehicles[0];
+      const driverName = order.driver || veh?.driver || 'Pasha';
+      const ownerName = veh?.owner || 'RZ Mining';
+      const vCategory = veh?.category || 'RZ Mining';
+
+      // 1. Reuse existing linked LoadOrder or create new LoadOrder
+      let loadRecord: LoadOrder;
+      const existingLoad = loads.find((l) => l.id === order.loadId);
+      if (existingLoad) {
+        loadRecord = existingLoad;
+      } else {
+        const defaultQuarryRate = rates.quarryRates[order.quality]?.ratePerUnit || 43;
+        const quarryAmount = order.unit === 'pcs' ? defaultQuarryRate * order.quantity : 5000;
+        const customerSaleAmount = order.grossAmount || order.rate * order.quantity;
+        const paid = paymentReceived !== undefined ? paymentReceived : order.paymentReceived || 0;
+
+        loadRecord = createLoad({
+          vehicleNumber: order.assignedVehicle || veh.vehicleNumber,
+          owner: ownerName,
+          driver: driverName,
+          vehicleCategory: vCategory,
+          customerId: order.customerId,
+          customerName: order.customer,
+          destination: order.deliveryLocation,
+          material: order.quality,
+          quantity: order.quantity,
+          unit: order.unit,
+          quarryRate: defaultQuarryRate,
+          quarryAmount,
+          customerSaleRate: order.rate,
+          customerSaleAmount,
+          paymentReceived: paid,
+          balance: customerSaleAmount - paid,
+          agentName: order.agentName,
+          paymentTerms: order.paymentTerms,
+          orderCommission: order.commission || 0,
+          remarks: remarks || order.remarks,
+        });
+      }
+
+      // 2. Generate Gate Pass
+      const gp = confirmAndGenerateGatePass(loadRecord.id, paymentReceived, remarks);
+
+      // 3. Update existing order to DISPATCHED with linked gate pass & load (NO duplicate data)
+      const paid = paymentReceived !== undefined ? paymentReceived : order.paymentReceived;
+      updateOrder(order.id, {
+        status: 'DISPATCHED',
+        loadId: loadRecord.id,
+        gatePassId: gp.id,
+        gatePassNumber: gp.gatePassNumber,
+        dispatchTime: getCurrentTimeString(),
+        paymentReceived: paid,
+        balance: order.grossAmount - paid,
+      });
+
+      return gp;
+    },
+    [orders, vehicles, loads, rates, createLoad, confirmAndGenerateGatePass, updateOrder]
+  );
+
   return (
     <QuarryContext.Provider
       value={{
         currentUser,
+        setCurrentUser,
         authUser,
         vehicles,
         drivers,
@@ -1197,6 +1726,9 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         expenses,
         payments,
         statements,
+        rotations,
+        vehicleTransactions,
+        orders,
         stock,
         isSyncing,
         createLoad,
@@ -1232,6 +1764,20 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateRates,
         saveStatement,
         deleteStatement,
+        getRotationForDate,
+        saveRotation,
+        advanceRotation,
+        updateRotationItemStatus,
+        addVehicleTransaction,
+        updateVehicleTransaction,
+        deleteVehicleTransaction,
+        updateVehicleOwnerType,
+        createOrder,
+        updateOrder,
+        deleteOrder,
+        advanceOrderWorkflow,
+        assignVehicleToOrder,
+        dispatchOrder,
         resetAllData,
         exportBackupJSON,
         importBackupJSON,

@@ -90,3 +90,5 @@ export function amountToWords(amount: number): string {
   result += ' Only';
   return result;
 }
+
+export const numberToWords = amountToWords;

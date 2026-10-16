@@ -23,11 +23,22 @@ import {
   Coins,
   Settings,
   X,
+  Award,
+  FileText,
+  Repeat,
+  Navigation,
+  Wrench,
+  MapPin,
+  CreditCard,
+  Users2,
 } from 'lucide-react';
 import { useQuarry } from '../../context/QuarryContext';
 
 export type NavTab =
   | 'dashboard'
+  | 'quarry_module'
+  | 'vehicle_module'
+  | 'order_module'
   | 'quarry_mgmt'
   | 'loads'
   | 'gate_pass'
@@ -38,12 +49,21 @@ export type NavTab =
   | 'driver_accounts'
   | 'vehicle_accounts'
   | 'production'
+  | 'quality'
   | 'stock'
   | 'income'
   | 'expenses'
   | 'staff'
   | 'attendance'
   | 'salary'
+  | 'payslips'
+  | 'rotation'
+  | 'trips'
+  | 'vehicle_expenses'
+  | 'vehicle_ledger'
+  | 'agents'
+  | 'delivery'
+  | 'payment_terms'
   | 'payments'
   | 'rates'
   | 'reports'
@@ -60,6 +80,8 @@ interface SidebarProps {
 
 interface NavGroup {
   label: string;
+  badge?: string;
+  color?: string;
   items: {
     id: NavTab;
     label: string;
@@ -74,78 +96,83 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { loads, gatePasses, stock } = useQuarry();
+  const { loads, gatePasses, stock, vehicles, customers } = useQuarry();
 
   const totalDispatches = gatePasses.length;
   const activeLoads = loads.filter((l) => l.status === 'Draft' || l.status === 'Loaded').length;
+  const totalStockBlocks = stock['Laterite Stone — 1st'] + stock['Laterite Stone — 2nd'];
 
   const groups: NavGroup[] = [
     {
-      label: 'QUARRY OPERATIONS',
+      label: '1. QUARRY MANAGEMENT',
+      color: 'text-[#f3c64c]',
       items: [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'quarry_mgmt', label: 'Quarry Management', icon: Mountain },
+        { id: 'quarry_module', label: 'Quarry Operations Hub', icon: Mountain },
+        { id: 'production', label: 'Production Log', icon: PackageCheck },
+        { id: 'quality', label: 'Quality & Grades', icon: Award },
         {
-          id: 'loads',
-          label: 'Load / Order Mgmt',
-          icon: Truck,
-          badge: activeLoads > 0 ? activeLoads : undefined,
+          id: 'stock',
+          label: 'Stock & Inventory',
+          icon: Boxes,
+          badge: `${(totalStockBlocks / 1000).toFixed(1)}k`,
         },
         {
           id: 'gate_pass',
-          label: 'Gate Pass System',
+          label: 'Gate Management',
           icon: Ticket,
           badge: totalDispatches,
         },
-        { id: 'production', label: 'Production Log', icon: PackageCheck },
-        {
-          id: 'stock',
-          label: 'Stock Management',
-          icon: Boxes,
-          badge: `${(stock['Laterite Stone — 1st'] / 1000).toFixed(1)}k`,
-        },
-      ],
-    },
-    {
-      label: 'FLEET & DRIVERS',
-      items: [
-        { id: 'vehicles', label: 'Vehicle Master', icon: Car },
-        { id: 'drivers', label: 'Driver Master', icon: Users },
-        { id: 'vehicle_accounts', label: 'Vehicle Accounts (RZ)', icon: Car },
-        { id: 'driver_accounts', label: 'Driver Accounts', icon: DollarSign },
-      ],
-    },
-    {
-      label: 'CUSTOMERS & BILLING',
-      items: [
-        { id: 'customers', label: 'Customer Master', icon: Building2 },
-        { id: 'customer_accounts', label: 'Customer Accounts', icon: BookOpen },
-        { id: 'payments', label: 'Payments / Collections', icon: HandCoins },
-        { id: 'bill_generator', label: 'Statement / Invoices', icon: FileSpreadsheet, badge: 'A4 PDF' },
-      ],
-    },
-    {
-      label: 'QUARRY ACCOUNTS & CASH',
-      items: [
-        { id: 'daily_account', label: 'Daily Account (Cash)', icon: Coins },
-        { id: 'income', label: 'Quarry Income', icon: TrendingUp },
         { id: 'expenses', label: 'Quarry Expenses', icon: Receipt },
-      ],
-    },
-    {
-      label: 'STAFF & PAYROLL',
-      items: [
-        { id: 'staff', label: 'Staff Master', icon: UserSquare2 },
+        { id: 'daily_account', label: 'Quarry Billing & Cash', icon: Coins },
+        { id: 'staff', label: 'Staff Directory', icon: UserSquare2 },
         { id: 'attendance', label: 'Staff Attendance', icon: CalendarCheck },
-        { id: 'salary', label: 'Salary / Payroll', icon: Wallet },
+        { id: 'salary', label: 'Salary & Payroll', icon: Wallet },
+        { id: 'payslips', label: 'Salary Slips', icon: FileText },
       ],
     },
     {
-      label: 'SYSTEM & CONFIG',
+      label: '2. VEHICLE MANAGEMENT',
+      color: 'text-sky-400',
       items: [
+        { id: 'vehicle_module', label: 'Vehicle Fleet Hub', icon: Truck },
+        { id: 'vehicles', label: 'Vehicle Master & Owners', icon: Car, badge: vehicles.length },
+        { id: 'drivers', label: 'Driver Master', icon: Users },
+        { id: 'rotation', label: 'Daily Rotation Engine', icon: Repeat, badge: 'Pos 1 Fixed' },
+        { id: 'trips', label: 'Trips & Freight Log', icon: Navigation, badge: loads.length },
+        { id: 'vehicle_expenses', label: 'Vehicle Expenses', icon: Wrench },
+        { id: 'vehicle_accounts', label: 'Vehicle Accounts Engine', icon: DollarSign, badge: 'Unified' },
+        { id: 'driver_accounts', label: 'Driver Collections', icon: Wallet },
+        { id: 'vehicle_ledger', label: 'Vehicle Ledger', icon: BookOpen },
+      ],
+    },
+    {
+      label: '3. ORDER MANAGEMENT',
+      color: 'text-emerald-400',
+      items: [
+        { id: 'order_module', label: 'Customer Order Hub', icon: FileSpreadsheet },
+        {
+          id: 'loads',
+          label: 'Customer Orders',
+          icon: Truck,
+          badge: activeLoads > 0 ? activeLoads : undefined,
+        },
+        { id: 'customers', label: 'Customer Master', icon: Building2, badge: customers.length },
+        { id: 'agents', label: 'Orderman & Commission', icon: Users2 },
         { id: 'rates', label: 'Rate Master', icon: Percent },
+        { id: 'delivery', label: 'Delivery & Dispatch', icon: MapPin },
+        { id: 'payment_terms', label: 'Payment Terms', icon: CreditCard },
+        { id: 'payments', label: 'Payments & Collections', icon: HandCoins },
+        { id: 'bill_generator', label: 'Invoices & Statements', icon: FileSpreadsheet, badge: 'A4' },
+        { id: 'customer_accounts', label: 'Customer Ledgers', icon: BookOpen },
+      ],
+    },
+    {
+      label: 'EXECUTIVE & SYSTEM',
+      color: 'text-gray-400',
+      items: [
+        { id: 'dashboard', label: 'Executive Pipeline', icon: LayoutDashboard },
         { id: 'reports', label: 'Quarry Reports', icon: FileBarChart },
-        { id: 'settings', label: 'Settings & Backup', icon: Settings },
+        { id: 'settings', label: 'Settings & Data Vault', icon: Settings },
       ],
     },
   ];
@@ -188,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
           {groups.map((group, gIdx) => (
             <div key={gIdx} className="space-y-1">
-              <p className="px-3 text-[10px] font-bold tracking-widest text-[#d4af37]/60 uppercase">
+              <p className={`px-3 text-[10px] font-bold tracking-widest uppercase ${group.color || 'text-[#d4af37]/60'}`}>
                 {group.label}
               </p>
               {group.items.map((item) => {

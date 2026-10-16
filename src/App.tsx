@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import React, { useState, useMemo } from 'react';
 import { QuarryProvider, useQuarry } from './context/QuarryContext';
-import { GoogleAuthScreen } from './components/auth/GoogleAuthScreen';
-import { Header } from './components/common/Header';
+import { Header, ActiveModuleType } from './components/common/Header';
 import { Sidebar, NavTab } from './components/common/Sidebar';
 import { MobileNav } from './components/common/MobileNav';
+
+// Locked 3 Master Operational Modules
+import { QuarryModuleView } from './views/modules/QuarryModuleView';
+import { VehicleModuleView } from './views/modules/VehicleModuleView';
+import { OrderModuleView } from './views/modules/OrderModuleView';
 
 // Modals
 import { NewLoadModal } from './components/modals/NewLoadModal';
@@ -16,33 +19,12 @@ import { ProductionModal } from './components/modals/ProductionModal';
 
 // Views
 import { DashboardView } from './views/DashboardView';
-import { QuarryManagementView } from './views/QuarryManagementView';
-import { LoadManagementView } from './views/LoadManagementView';
-import { GatePassView } from './views/GatePassView';
-import { VehicleManagementView } from './views/VehicleManagementView';
-import { DriverManagementView } from './views/DriverManagementView';
-import { CustomerManagementView } from './views/CustomerManagementView';
-import { CustomerAccountsView } from './views/CustomerAccountsView';
-import { DriverAccountsView } from './views/DriverAccountsView';
-import { VehicleAccountsView } from './views/VehicleAccountsView';
-import { ProductionView } from './views/ProductionView';
-import { StockView } from './views/StockView';
-import { QuarryIncomeView } from './views/QuarryIncomeView';
-import { QuarryExpensesView } from './views/QuarryExpensesView';
-import { StaffManagementView } from './views/StaffManagementView';
-import { StaffAttendanceView } from './views/StaffAttendanceView';
-import { StaffSalaryPayrollView } from './views/StaffSalaryPayrollView';
-import { PaymentsCollectionsView } from './views/PaymentsCollectionsView';
-import { RateMasterView } from './views/RateMasterView';
 import { ReportsView } from './views/ReportsView';
-import { StatementBillGeneratorView } from './views/StatementBillGeneratorView';
-import { DailyAccountView } from './views/DailyAccountView';
 import { SettingsView } from './views/SettingsView';
 
 import { Customer, GatePass, LoadOrder } from './types/quarry';
 
 const QuarryAppInner: React.FC = () => {
-  const { user, isAccessRestricted } = useAuth();
   const { gatePasses, customers, loads } = useQuarry();
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -70,10 +52,7 @@ const QuarryAppInner: React.FC = () => {
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [productionModalOpen, setProductionModalOpen] = useState(false);
 
-  // If not verified or access is restricted, show Google verification screen
-  if (!user || isAccessRestricted) {
-    return <GoogleAuthScreen />;
-  }
+  // Direct access: No login screen, opens directly to Quarry Dashboard
 
   // Handlers
   const handleOpenNewLoad = (initialData?: Partial<LoadOrder>) => {
@@ -116,12 +95,70 @@ const QuarryAppInner: React.FC = () => {
     setCurrentTab('customer_accounts');
   };
 
+  // Determine active module based on current navigation tab
+  const activeModule: ActiveModuleType = useMemo(() => {
+    if (
+      currentTab === 'quarry_module' ||
+      currentTab === 'quarry_mgmt' ||
+      currentTab === 'production' ||
+      currentTab === 'quality' ||
+      currentTab === 'stock' ||
+      currentTab === 'gate_pass' ||
+      currentTab === 'expenses' ||
+      currentTab === 'daily_account' ||
+      currentTab === 'staff' ||
+      currentTab === 'attendance' ||
+      currentTab === 'salary' ||
+      currentTab === 'payslips' ||
+      currentTab === 'income'
+    ) {
+      return 'quarry';
+    }
+    if (
+      currentTab === 'vehicle_module' ||
+      currentTab === 'vehicles' ||
+      currentTab === 'drivers' ||
+      currentTab === 'rotation' ||
+      currentTab === 'trips' ||
+      currentTab === 'vehicle_expenses' ||
+      currentTab === 'vehicle_accounts' ||
+      currentTab === 'driver_accounts' ||
+      currentTab === 'vehicle_ledger'
+    ) {
+      return 'vehicle';
+    }
+    if (
+      currentTab === 'order_module' ||
+      currentTab === 'loads' ||
+      currentTab === 'customers' ||
+      currentTab === 'agents' ||
+      currentTab === 'customer_accounts' ||
+      currentTab === 'rates' ||
+      currentTab === 'delivery' ||
+      currentTab === 'payment_terms' ||
+      currentTab === 'payments' ||
+      currentTab === 'bill_generator'
+    ) {
+      return 'order';
+    }
+    return 'dashboard';
+  }, [currentTab]);
+
+  const handleSelectModule = (mod: ActiveModuleType) => {
+    if (mod === 'quarry') setCurrentTab('quarry_module');
+    else if (mod === 'vehicle') setCurrentTab('vehicle_module');
+    else if (mod === 'order') setCurrentTab('order_module');
+    else setCurrentTab('dashboard');
+  };
+
   return (
     <div className="min-h-screen bg-[#090a0d] text-[#e5e7eb] flex flex-col antialiased">
-      {/* Top Header */}
+      {/* Top Header with 3 Master Operational Module Switcher */}
       <Header
         onOpenNewLoad={() => handleOpenNewLoad()}
         onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+        activeModule={activeModule}
+        onSelectModule={handleSelectModule}
       />
 
       <div className="flex flex-1">
@@ -135,6 +172,7 @@ const QuarryAppInner: React.FC = () => {
 
         {/* Main Content Area */}
         <main className="flex-1 lg:ml-72 p-3 sm:p-6 pb-20 lg:pb-8 max-w-7xl w-full mx-auto">
+          {/* Executive Pipeline Dashboard */}
           {currentTab === 'dashboard' && (
             <DashboardView
               onNavigate={(tab) => setCurrentTab(tab)}
@@ -146,75 +184,123 @@ const QuarryAppInner: React.FC = () => {
             />
           )}
 
-          {currentTab === 'quarry_mgmt' && <QuarryManagementView />}
-
-          {currentTab === 'loads' && (
-            <LoadManagementView
-              onOpenNewLoad={handleOpenNewLoad}
-              onViewGatePass={handleViewGatePassByNumber}
-            />
-          )}
-
-          {currentTab === 'gate_pass' && (
-            <GatePassView
+          {/* 1. QUARRY MANAGEMENT MODULE */}
+          {(currentTab === 'quarry_module' ||
+            currentTab === 'quarry_mgmt' ||
+            currentTab === 'production' ||
+            currentTab === 'quality' ||
+            currentTab === 'stock' ||
+            currentTab === 'gate_pass' ||
+            currentTab === 'expenses' ||
+            currentTab === 'daily_account' ||
+            currentTab === 'income' ||
+            currentTab === 'staff' ||
+            currentTab === 'attendance' ||
+            currentTab === 'salary' ||
+            currentTab === 'payslips') && (
+            <QuarryModuleView
+              initialTab={
+                currentTab === 'production'
+                  ? 'production'
+                  : currentTab === 'quality'
+                  ? 'quality'
+                  : currentTab === 'stock'
+                  ? 'stock'
+                  : currentTab === 'gate_pass'
+                  ? 'gate'
+                  : currentTab === 'expenses'
+                  ? 'expenses'
+                  : currentTab === 'daily_account' || currentTab === 'income'
+                  ? 'billing'
+                  : currentTab === 'staff'
+                  ? 'staff'
+                  : currentTab === 'attendance'
+                  ? 'attendance'
+                  : currentTab === 'salary'
+                  ? 'salary'
+                  : currentTab === 'payslips'
+                  ? 'payslips'
+                  : 'production'
+              }
+              onOpenProductionModal={() => setProductionModalOpen(true)}
+              onOpenExpenseModal={() => setExpenseModalOpen(true)}
               onSelectGatePass={handleOpenGatePassModal}
               onOpenNewLoad={() => handleOpenNewLoad()}
             />
           )}
 
-          {currentTab === 'vehicles' && <VehicleManagementView />}
-
-          {currentTab === 'drivers' && <DriverManagementView />}
-
-          {currentTab === 'customers' && (
-            <CustomerManagementView
-              onViewCustomerLedger={handleNavigateToCustomerLedger}
+          {/* 2. VEHICLE MANAGEMENT MODULE */}
+          {(currentTab === 'vehicle_module' ||
+            currentTab === 'vehicles' ||
+            currentTab === 'drivers' ||
+            currentTab === 'rotation' ||
+            currentTab === 'trips' ||
+            currentTab === 'vehicle_expenses' ||
+            currentTab === 'vehicle_accounts' ||
+            currentTab === 'driver_accounts' ||
+            currentTab === 'vehicle_ledger') && (
+            <VehicleModuleView
+              initialTab={
+                currentTab === 'vehicles'
+                  ? 'vehicles'
+                  : currentTab === 'drivers'
+                  ? 'drivers'
+                  : currentTab === 'rotation'
+                  ? 'rotation'
+                  : currentTab === 'trips'
+                  ? 'trips'
+                  : currentTab === 'vehicle_expenses'
+                  ? 'expenses'
+                  : currentTab === 'vehicle_accounts'
+                  ? 'accounts'
+                  : currentTab === 'driver_accounts'
+                  ? 'driver_collections'
+                  : currentTab === 'vehicle_ledger'
+                  ? 'ledger'
+                  : 'vehicles'
+              }
             />
           )}
 
-          {currentTab === 'customer_accounts' && (
-            <CustomerAccountsView
+          {/* 3. ORDER MANAGEMENT MODULE */}
+          {(currentTab === 'order_module' ||
+            currentTab === 'loads' ||
+            currentTab === 'customers' ||
+            currentTab === 'agents' ||
+            currentTab === 'customer_accounts' ||
+            currentTab === 'rates' ||
+            currentTab === 'delivery' ||
+            currentTab === 'payment_terms' ||
+            currentTab === 'payments' ||
+            currentTab === 'bill_generator') && (
+            <OrderModuleView
+              initialTab={
+                currentTab === 'customers'
+                  ? 'customers'
+                  : currentTab === 'agents'
+                  ? 'agents'
+                  : currentTab === 'rates'
+                  ? 'rate_master'
+                  : currentTab === 'delivery'
+                  ? 'delivery'
+                  : currentTab === 'payment_terms'
+                  ? 'payment_terms'
+                  : currentTab === 'payments'
+                  ? 'collections'
+                  : currentTab === 'bill_generator' || currentTab === 'customer_accounts'
+                  ? 'billing'
+                  : 'orders'
+              }
+              onOpenNewLoad={handleOpenNewLoad}
+              onViewGatePass={handleViewGatePassByNumber}
+              onViewCustomerLedger={handleNavigateToCustomerLedger}
               onOpenStatementModal={handleOpenStatementModal}
               onOpenPaymentModal={handleOpenPaymentModal}
             />
           )}
 
-          {currentTab === 'driver_accounts' && <DriverAccountsView />}
-
-          {currentTab === 'vehicle_accounts' && <VehicleAccountsView />}
-
-          {currentTab === 'production' && (
-            <ProductionView onOpenProductionModal={() => setProductionModalOpen(true)} />
-          )}
-
-          {currentTab === 'stock' && <StockView />}
-
-          {currentTab === 'income' && <QuarryIncomeView />}
-
-          {currentTab === 'expenses' && (
-            <QuarryExpensesView onOpenExpenseModal={() => setExpenseModalOpen(true)} />
-          )}
-
-          {currentTab === 'staff' && <StaffManagementView />}
-
-          {currentTab === 'attendance' && <StaffAttendanceView />}
-
-          {currentTab === 'salary' && <StaffSalaryPayrollView />}
-
-          {currentTab === 'payments' && (
-            <PaymentsCollectionsView onOpenPaymentModal={() => handleOpenPaymentModal()} />
-          )}
-
-          {currentTab === 'rates' && <RateMasterView />}
-
+          {/* System & Global Config */}
           {currentTab === 'reports' && <ReportsView />}
-
-          {currentTab === 'bill_generator' && (
-            <StatementBillGeneratorView onOpenStatementModal={handleOpenStatementModal} />
-          )}
-
-          {currentTab === 'daily_account' && <DailyAccountView />}
-
           {currentTab === 'settings' && <SettingsView />}
         </main>
       </div>
@@ -272,10 +358,8 @@ const QuarryAppInner: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <QuarryProvider>
-        <QuarryAppInner />
-      </QuarryProvider>
-    </AuthProvider>
+    <QuarryProvider>
+      <QuarryAppInner />
+    </QuarryProvider>
   );
 }
