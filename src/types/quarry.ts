@@ -33,7 +33,7 @@ export type LoadStatus =
   | 'Delivered'
   | 'Settled';
 
-export type PaymentMode = 'Cash' | 'Bank' | 'UPI' | 'Cheque';
+export type PaymentMode = 'Cash' | 'Bank' | 'Bank Transfer' | 'UPI' | 'Cheque';
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'Half Day' | 'Leave' | 'Holiday';
 
@@ -77,6 +77,11 @@ export interface Vehicle extends AuditFields {
   status: 'Available' | 'On Trip' | 'Maintenance';
   active: boolean;
   remarks?: string;
+  tripRentRate?: number; // ₹700 or ₹500 standard
+  rentCategory?: '₹700_TRIP' | '₹500_TRIP' | 'CUSTOM';
+  hasPartnership?: boolean;
+  partnerName?: string;
+  partnerPercentage?: number;
   createdAt: string;
 }
 
@@ -235,9 +240,13 @@ export interface LoadOrder extends AuditFields {
   ratedQuantity?: number; // e.g. 255
   vehicleReceivedQuantity?: number; // Stored independently from quarry rated qty (e.g. 260 or 250)
   rateCondition?: RateCondition; // 'Standard Rock' or 'Weaker Rock'
-  quarrySection?: string; // 'Section A' or 'Section B'
   gapPosition?: number; // 1, 2, 3, 4
   roundNumber?: number;
+
+  // Master Prompt Special Rules
+  isSpecialTradingLoad?: boolean; // Special 3rd trip trading load for ₹500 trip rent vehicle
+  loadType?: 'QUARRY_SALE' | 'VEHICLE_STONE_PURCHASE'; // Distinguish quarry sale vs vehicle stone purchase
+  loadingPaidByQuarry?: boolean; // If true, reduce applicable trip rent by loading charge
 
   // Quarry Rates & Totals
   quarryRate: number; // per pc or per load (43 for Standard 1st, 41 for Weaker 1st, etc.)
@@ -792,9 +801,10 @@ export interface LandPaymentEntry {
   amount: number;
   paymentMode: PaymentMode;
   reference?: string;
+  receiptNumber?: string;
   remarks?: string;
   enteredBy: AppUser;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface LandOwnerAccount {
@@ -813,10 +823,50 @@ export interface LandOwnerAccount {
   paidAmount: number; // ONLY actual entered payments
   balanceAmount: number; // agreementValue - paidAmount
   outstandingAmount: number;
-  adjustments: number;
-  notes: string;
+  adjustments?: number;
+  notes?: string;
   documents: string[]; // document / photo URLs or names
   payments: LandPaymentEntry[];
+  // Section B Stone-based Land Owner rates (Master Rules: 1st=₹8, 2nd=₹8, 3rd=no price)
+  surveyNumber?: string;
+  sectionRate1st?: number; // ₹8 / pc
+  sectionRate2nd?: number; // ₹8 / pc
+  sectionRate3rd?: number; // ₹0 (no price)
+  stoneCuttingCount1st?: number;
+  stoneCuttingCount2nd?: number;
+  stoneCuttingRoyaltyPayable?: number;
+}
+
+export interface VehiclePartnership extends AuditFields {
+  id: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  partnerName: string;
+  partnerPhone?: string;
+  ownershipPercentage: number; // e.g. 50
+  capitalInvested: number;
+  startDate: string;
+  active: boolean;
+  totalIncomeShare: number;
+  totalExpenseShare: number;
+  netProfitShare: number;
+  settledAmount: number;
+  balancePayable: number;
+  notes?: string;
+}
+
+export interface PartnershipSettlement extends AuditFields {
+  id: string;
+  partnershipId: string;
+  vehicleNumber: string;
+  partnerName: string;
+  date: string;
+  amount: number;
+  paymentMode: PaymentMode;
+  reference?: string;
+  receiptNumber: string;
+  notes?: string;
+  enteredBy: AppUser;
 }
 
 export interface QuarryProfile extends AuditFields {

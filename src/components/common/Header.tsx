@@ -74,7 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Center: 3 Primary Operational Modules Navigation Switcher */}
+      {/* Center: Exactly 3 Primary Operational Modules Navigation Switcher */}
       <div className="hidden md:flex items-center bg-[#10131c] border border-[#232736] rounded-xl p-1 gap-1 shadow-inner">
         <button
           type="button"
@@ -98,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/25 font-black'
               : 'text-gray-300 hover:text-white hover:bg-[#171b26]'
           }`}
-          title="Module 1: Production, Quality, Stock, Expenses, Staff, Gate, Billing"
+          title="Module 1: Quarry Master, Production, Machinery, JCB, Quality, Direct Loading, Gate, Staff, Land Owner, Bills"
         >
           <Mountain className="w-3.5 h-3.5" />
           <span>1. QUARRY</span>
@@ -112,7 +112,7 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'bg-sky-500 text-black shadow-md shadow-sky-500/25 font-black'
               : 'text-gray-300 hover:text-white hover:bg-[#171b26]'
           }`}
-          title="Module 2: Vehicle Master, Drivers, Rotation, Trips, Accounts, Ledger"
+          title="Module 2: Vehicle Master, Drivers, Pos 1 Fixed Rotation, Trips, Vehicle Ledger, Partnerships"
         >
           <Truck className="w-3.5 h-3.5" />
           <span>2. VEHICLES</span>
@@ -123,10 +123,10 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => onSelectModule?.('order')}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
             activeModule === 'order'
-              ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25 font-black'
+              ? 'bg-amber-400 text-black shadow-md shadow-amber-400/25 font-black'
               : 'text-gray-300 hover:text-white hover:bg-[#171b26]'
           }`}
-          title="Module 3: Customers, Orders, Agents, Rates, Delivery, Billing"
+          title="Module 3: Order Workflow, Vehicle Assignment, Gate-Out, Loading, Delivery, Invoicing, Settlements"
         >
           <FileText className="w-3.5 h-3.5" />
           <span>3. ORDERS</span>

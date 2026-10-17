@@ -58,6 +58,10 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
   // Vehicle Received Quantity (stored completely independently from quarry rated quantity)
   const [vehicleReceivedQuantity, setVehicleReceivedQuantity] = useState<number>(260);
 
+  // Master Prompt: Special 3rd-Trip Trading Load & Loading Charge Options
+  const [isSpecialTradingLoad, setIsSpecialTradingLoad] = useState<boolean>(false);
+  const [loadingPaidByQuarry, setLoadingPaidByQuarry] = useState<boolean>(false);
+
   // When order is selected: Auto-populate Customer, Quality, Quantity, Rate, Delivery Location & Payment Terms
   const handleOrderSelect = (ordId: string) => {
     setSelectedOrderId(ordId);
@@ -208,7 +212,20 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
       ? 31
       : 33);
 
-  const quarryRate = customQuarryRate !== null ? customQuarryRate : calculatedQuarryRate;
+  // Master Prompt: Special 3rd-Trip Trading Load Rates (1st: ₹45, 2nd: ₹35, 3rd: ₹3,000, Latt: ₹1,200)
+  const specialTradingRate = is3rd
+    ? 3000
+    : material === 'Laterite Stone — 1st'
+    ? 45
+    : material === 'Laterite Stone — 2nd'
+    ? 35
+    : 1200;
+
+  const effectiveCalculatedQuarryRate = isSpecialTradingLoad
+    ? specialTradingRate
+    : calculatedQuarryRate;
+
+  const quarryRate = customQuarryRate !== null ? customQuarryRate : effectiveCalculatedQuarryRate;
 
   // Quarry purchase bill uses Rated Quantity (255 pcs or load count)
   const effectiveQuarryBillQty = is3rd ? quantity : (ratedQuantity || 255);
@@ -242,6 +259,16 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
     loadingCharge = rates.loadExpenses.loadingCharge * (multiplier || 1);
     diesel = rates.loadExpenses.diesel * (multiplier || 1);
     orderCommission = (rates.loadExpenses.commissions[material] || 250) * (multiplier || 1);
+
+    // If loading is paid by Quarry, reduce trip rent accordingly
+    if (loadingPaidByQuarry) {
+      vehicleTripRent = Math.max(0, vehicleTripRent - loadingCharge);
+    }
+    // If it's a special 3rd trip trading load, vehicle acts as stone purchase/resale
+    if (isSpecialTradingLoad) {
+      vehicleTripRent = 0;
+    }
+
     totalExpense = driverBatta + vehicleTripRent + loadingCharge + diesel + orderCommission;
     netProfit = customerSaleAmount - quarryAmount - totalExpense;
   }
@@ -281,6 +308,9 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
         paymentTerms,
         remarks,
         status: immediateGatePass ? 'Draft' : 'Loaded',
+        isSpecialTradingLoad,
+        loadType: isSpecialTradingLoad ? 'VEHICLE_STONE_PURCHASE' : 'QUARRY_SALE',
+        loadingPaidByQuarry,
       });
 
       if (immediateGatePass) {
@@ -490,6 +520,38 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
                   <option value="Laterite Stone — 3rd">Laterite Stone — 3rd / Mury (Load Unit)</option>
                 </select>
               </div>
+            </div>
+
+            {/* Special Trading Load & Quarry Loading Paid Option */}
+            <div className="p-3 rounded-xl bg-[#131622] border border-[#2b334a] space-y-2 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isSpecialTradingLoad}
+                    onChange={(e) => setIsSpecialTradingLoad(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#d4af37] accent-[#d4af37] cursor-pointer"
+                  />
+                  <span className="font-bold text-amber-300">
+                    Special 3rd-Trip Trading Load (Stone Purchase: 1st ₹45, 2nd ₹35, 3rd ₹3,000, Latt ₹1,200)
+                  </span>
+                </label>
+                <span className="text-[10px] font-mono text-gray-400">
+                  {isSpecialTradingLoad ? 'STONE PURCHASE / TRADING LOAD' : 'QUARRY PRODUCTION SALE'}
+                </span>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1 border-t border-[#1f2638]">
+                <input
+                  type="checkbox"
+                  checked={loadingPaidByQuarry}
+                  onChange={(e) => setLoadingPaidByQuarry(e.target.checked)}
+                  className="w-4 h-4 rounded text-sky-400 accent-sky-400 cursor-pointer"
+                />
+                <span className="text-gray-300">
+                  Quarry Pays Loading (₹900) — <span className="text-gray-400">Reduces vehicle trip rent accordingly</span>
+                </span>
+              </label>
             </div>
 
             {/* Operational Load Formula: 260 + 5 Free = 255 Rated vs Vehicle Received Qty */}

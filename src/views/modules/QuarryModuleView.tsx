@@ -15,6 +15,7 @@ import { StaffManagementView } from '../StaffManagementView';
 import { StaffAttendanceView } from '../StaffAttendanceView';
 import { StaffSalaryPayrollView } from '../StaffSalaryPayrollView';
 import { SalarySlipModal } from '../../components/modals/SalarySlipModal';
+import { LandOwnerLedgerView } from '../LandOwnerLedgerView';
 
 import {
   Mountain,
@@ -33,6 +34,7 @@ import {
   TrendingUp,
   Repeat,
   Wrench,
+  Landmark,
 } from 'lucide-react';
 
 export type QuarrySubTab =
@@ -43,6 +45,7 @@ export type QuarrySubTab =
   | 'stock'
   | 'gate'
   | 'expenses'
+  | 'land'
   | 'billing'
   | 'staff'
   | 'attendance'
@@ -100,6 +103,7 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
     { id: 'stock', label: 'Throughput & Pipeline', icon: Boxes },
     { id: 'gate', label: 'Gate Management', icon: Ticket, badge: `${gatePasses.length}` },
     { id: 'expenses', label: 'Quarry Expenses', icon: Receipt },
+    { id: 'land', label: 'Land Owner Ledger', icon: Landmark, badge: '20 Cent' },
     { id: 'billing', label: 'Quarry Billing', icon: Coins },
     { id: 'staff', label: 'Staff Directory', icon: Users, badge: `${staff.length}` },
     { id: 'attendance', label: 'Attendance', icon: CalendarCheck },
@@ -371,6 +375,8 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
         {activeTab === 'expenses' && (
           <QuarryExpensesView onOpenExpenseModal={onOpenExpenseModal} />
         )}
+
+        {activeTab === 'land' && <LandOwnerLedgerView />}
 
         {activeTab === 'billing' && <DailyAccountView />}
 

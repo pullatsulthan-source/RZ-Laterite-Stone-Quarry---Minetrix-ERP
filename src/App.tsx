@@ -100,6 +100,7 @@ const QuarryAppInner: React.FC = () => {
     if (
       currentTab === 'quarry_module' ||
       currentTab === 'quarry_mgmt' ||
+      currentTab === 'machinery' ||
       currentTab === 'production' ||
       currentTab === 'quality' ||
       currentTab === 'stock' ||
@@ -262,6 +263,8 @@ const QuarryAppInner: React.FC = () => {
                   ? 'ledger'
                   : 'vehicles'
               }
+              onOpenNewLoad={() => handleOpenNewLoad()}
+              onSelectGatePass={handleOpenGatePassModal}
             />
           )}
 

@@ -10,6 +10,8 @@ import { VehicleAccountsView } from '../VehicleAccountsView';
 import { DriverAccountsView } from '../DriverAccountsView';
 import { DriverCollectionsView } from '../DriverCollectionsView';
 import { VehicleRotationView } from '../VehicleRotationView';
+import { OrderManagementView } from '../OrderManagementView';
+import { GatePassView } from '../GatePassView';
 
 import {
   Truck,
@@ -26,6 +28,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
+  FileSpreadsheet,
+  Ticket,
 } from 'lucide-react';
 
 export type VehicleSubTab =
@@ -33,17 +37,23 @@ export type VehicleSubTab =
   | 'drivers'
   | 'rotation'
   | 'trips'
-  | 'expenses'
   | 'accounts'
+  | 'orders'
+  | 'dispatch'
+  | 'expenses'
   | 'driver_collections'
   | 'ledger';
 
 interface VehicleModuleViewProps {
   initialTab?: VehicleSubTab;
+  onOpenNewLoad?: () => void;
+  onSelectGatePass?: (gp: any) => void;
 }
 
 export const VehicleModuleView: React.FC<VehicleModuleViewProps> = ({
   initialTab = 'vehicles',
+  onOpenNewLoad,
+  onSelectGatePass,
 }) => {
   const { vehicles, drivers, loads, gatePasses, expenses } = useQuarry();
 
@@ -148,9 +158,11 @@ export const VehicleModuleView: React.FC<VehicleModuleViewProps> = ({
     { id: 'drivers', label: 'Driver Master', icon: Users, badge: `${drivers.length}` },
     { id: 'rotation', label: 'Daily Rotation Engine', icon: Repeat, badge: 'Pos 1 Fixed' },
     { id: 'trips', label: 'Trips & Freight Log', icon: Navigation, badge: `${trips.length}` },
-    { id: 'expenses', label: 'Vehicle Expenses', icon: Wrench },
     { id: 'accounts', label: 'Vehicle Accounts Engine', icon: DollarSign, badge: 'Unified' },
+    { id: 'orders', label: 'Order Management', icon: FileSpreadsheet, badge: `${loads.length}` },
+    { id: 'dispatch', label: 'Outward Dispatch', icon: Ticket, badge: `${gatePasses.length}` },
     { id: 'driver_collections', label: 'Driver Collections', icon: Wallet },
+    { id: 'expenses', label: 'Vehicle Expenses', icon: Wrench },
     { id: 'ledger', label: 'Vehicle Ledger', icon: BookOpen },
   ];
 
@@ -404,6 +416,19 @@ export const VehicleModuleView: React.FC<VehicleModuleViewProps> = ({
         )}
 
         {activeTab === 'accounts' && <VehicleAccountsView />}
+
+        {activeTab === 'orders' && (
+          <OrderManagementView
+            onOpenNewLoad={onOpenNewLoad || (() => {})}
+          />
+        )}
+
+        {activeTab === 'dispatch' && (
+          <GatePassView
+            onSelectGatePass={onSelectGatePass || (() => {})}
+            onOpenNewLoad={onOpenNewLoad || (() => {})}
+          />
+        )}
 
         {activeTab === 'driver_collections' && (
           <div className="space-y-4">
