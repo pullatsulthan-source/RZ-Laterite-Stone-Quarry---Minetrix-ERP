@@ -1,0 +1,6 @@
+{
+  "summary": "Implementation plan for RZ MINETRIX quarry business logic correction, removing physical warehouse stock in favor of direct pit loading, section-specific rates, and 5 PM shift completion rules.",
+  "updatedAt": "2026-10-17T14:36:11.026301579Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

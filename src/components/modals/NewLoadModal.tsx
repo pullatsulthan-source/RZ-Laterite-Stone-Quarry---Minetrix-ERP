@@ -25,6 +25,7 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
     confirmAndGenerateGatePass,
     orders,
     dispatchOrder,
+    activeQuarry,
   } = useQuarry();
 
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
@@ -41,6 +42,7 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
   const [agentName, setAgentName] = useState('Direct Order');
   const [paymentTerms, setPaymentTerms] = useState('Cash on Delivery');
   const [customRate, setCustomRate] = useState<number | null>(null);
+  const [customQuarryRate, setCustomQuarryRate] = useState<number | null>(null);
 
   const [material, setMaterial] = useState<MaterialType>('Laterite Stone — 1st');
   const [quantity, setQuantity] = useState<number>(250);
@@ -110,7 +112,9 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
         setFreeQuantity(initialData.freeQuantity || 5);
         setRatedQuantity(initialData.ratedQuantity || 255);
         setVehicleReceivedQuantity(initialData.vehicleReceivedQuantity || initialData.quantity || 260);
-        setRateCondition(initialData.rateCondition || 'Standard Rock');
+        setRateCondition(initialData.rateCondition || (activeQuarry?.id === 'quarry-001-b' ? 'Weaker Rock' : 'Standard Rock'));
+        if (initialData.quarryRate) setCustomQuarryRate(initialData.quarryRate);
+        else setCustomQuarryRate(null);
         setPaymentReceived(initialData.paymentReceived || 0);
         setRemarks(initialData.remarks || '');
       } else {
@@ -134,13 +138,14 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
         setFreeQuantity(5);
         setRatedQuantity(255);
         setVehicleReceivedQuantity(260);
-        setRateCondition('Standard Rock');
+        setRateCondition(activeQuarry?.id === 'quarry-001-b' ? 'Weaker Rock' : 'Standard Rock');
+        setCustomQuarryRate(null);
         setPaymentReceived(0);
         setRemarks('');
         setImmediateGatePass(true);
       }
     }
-  }, [isOpen, initialData, vehicles, customers]);
+  }, [isOpen, initialData, vehicles, customers, activeQuarry]);
 
   // When vehicle selected from dropdown
   const handleVehicleSelect = (id: string) => {
@@ -191,7 +196,7 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
       ? rates.weakerRockRates
       : rates.quarryRates;
 
-  const quarryRate =
+  const calculatedQuarryRate =
     activeQuarryRates[material]?.ratePerUnit ||
     (is3rd
       ? rates.muryLoadRate || 1000
@@ -202,6 +207,8 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
       : rateCondition === 'Weaker Rock'
       ? 31
       : 33);
+
+  const quarryRate = customQuarryRate !== null ? customQuarryRate : calculatedQuarryRate;
 
   // Quarry purchase bill uses Rated Quantity (255 pcs or load count)
   const effectiveQuarryBillQty = is3rd ? quantity : (ratedQuantity || 255);
@@ -572,13 +579,31 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Quarry Purchase Rate
-                </label>
-                <div className="px-3 py-2 bg-[#161924] border border-[#2a3044] rounded-xl text-sm font-mono font-bold text-gray-300 flex items-center justify-between">
-                  <span>{formatCurrency(quarryRate)} / {is3rd ? 'load' : 'pc'}</span>
-                  <span className="text-[10px] text-gray-400 uppercase font-sans">
-                    {rateCondition}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-gray-300">
+                    Quarry Purchase Rate
+                  </label>
+                  {customQuarryRate !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomQuarryRate(null)}
+                      className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                    >
+                      Reset ({formatCurrency(calculatedQuarryRate)})
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    value={quarryRate}
+                    onChange={(e) => setCustomQuarryRate(Number(e.target.value) || 0)}
+                    className="w-full bg-[#161924] border border-[#2a3044] rounded-xl px-3 py-2 text-sm text-gray-100 font-mono font-bold focus:outline-none focus:border-[#d4af37]"
+                  />
+                  <span className="absolute right-3 top-2 text-[10px] text-gray-400 uppercase font-sans pointer-events-none">
+                    {customQuarryRate !== null ? 'Custom' : rateCondition}
                   </span>
                 </div>
               </div>

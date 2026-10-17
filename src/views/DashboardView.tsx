@@ -52,6 +52,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     advances,
     currentUser,
     rotations,
+    activeQuarry,
+    dailyProductionRecords,
   } = useQuarry();
 
   const today = getTodayDateString();
@@ -153,7 +155,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             RZ Laterite Stone Quarry Dashboard
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            Real-time daily quarry dispatches, fleet financials, gate passes & stock tracking
+            Real-time pit face extraction, direct vehicle loading & dispatches • <span className="text-amber-400 font-semibold">Zero physical warehouse stock</span> • Active: {activeQuarry?.quarryName || 'RZ Quarry 001/A'}
           </p>
         </div>
 
@@ -224,55 +226,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
-          {/* Step 1: Quarry */}
+          {/* Step 1: Quarry Production */}
           <div
             onClick={() => onNavigate('production')}
             className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-[#d4af37]/40 cursor-pointer transition-all group"
           >
             <div className="flex items-center justify-between text-[10px] text-[#f3c64c] font-bold uppercase mb-1">
-              <span>1. Quarry</span>
+              <span>1. Extraction</span>
               <span className="text-gray-500 group-hover:text-white">➔</span>
             </div>
-            <div className="font-bold text-gray-200 truncate">Pit Production</div>
+            <div className="font-bold text-gray-200 truncate">Pit Face Cutting</div>
             <div className="text-xs font-mono font-bold text-[#d4af37] mt-1">
               {metrics.todayProductionPcs.toLocaleString()} pcs
             </div>
-            <div className="text-[9px] text-gray-500">Adds to Stock</div>
+            <div className="text-[9px] text-gray-400">Direct Extraction</div>
           </div>
 
-          {/* Step 2: Stock */}
+          {/* Step 2: Direct Loading */}
           <div
             onClick={() => onNavigate('stock')}
-            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-[#d4af37]/40 cursor-pointer transition-all group"
+            className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-cyan-500/40 cursor-pointer transition-all group"
           >
-            <div className="flex items-center justify-between text-[10px] text-[#f3c64c] font-bold uppercase mb-1">
-              <span>2. Stock</span>
+            <div className="flex items-center justify-between text-[10px] text-cyan-400 font-bold uppercase mb-1">
+              <span>2. Direct Loading</span>
               <span className="text-gray-500 group-hover:text-white">➔</span>
             </div>
-            <div className="font-bold text-gray-200 truncate">Inventory Pit</div>
-            <div className="text-xs font-mono font-bold text-[#d4af37] mt-1">
-              {(stock['Laterite Stone — 1st'] + stock['Laterite Stone — 2nd']).toLocaleString()} pcs
+            <div className="font-bold text-gray-200 truncate">Vehicle Bay Fill</div>
+            <div className="text-xs font-mono font-bold text-cyan-400 mt-1">
+              {metrics.totalQuantityPcs.toLocaleString()} pcs
             </div>
-            <div className="text-[9px] text-gray-500">Ready for Orders</div>
+            <div className="text-[9px] text-emerald-400">Zero Pit Stock</div>
           </div>
 
-          {/* Step 3: Order */}
+          {/* Step 3: Orders */}
           <div
             onClick={() => onNavigate('loads')}
             className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-emerald-500/40 cursor-pointer transition-all group"
           >
             <div className="flex items-center justify-between text-[10px] text-emerald-400 font-bold uppercase mb-1">
-              <span>3. Order</span>
+              <span>3. Orders</span>
               <span className="text-gray-500 group-hover:text-white">➔</span>
             </div>
-            <div className="font-bold text-gray-200 truncate">Stock Allocation</div>
+            <div className="font-bold text-gray-200 truncate">Bay Allocation</div>
             <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
-              {loads.filter(l => l.status === 'Draft' || l.status === 'Loaded').length} Booked
+              {loads.filter(l => l.status === 'Draft' || l.status === 'Loaded').length} Allocated
             </div>
-            <div className="text-[9px] text-gray-500">Assigns Truck/Driver</div>
+            <div className="text-[9px] text-gray-400">Truck / Driver</div>
           </div>
 
-          {/* Step 4: Vehicle & Driver */}
+          {/* Step 4: Fleet Rotation */}
           <div
             onClick={() => onNavigate('vehicles')}
             className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-sky-500/40 cursor-pointer transition-all group"
@@ -281,14 +283,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>4. Fleet</span>
               <span className="text-gray-500 group-hover:text-white">➔</span>
             </div>
-            <div className="font-bold text-gray-200 truncate">Vehicle & Driver</div>
+            <div className="font-bold text-gray-200 truncate">Gap Rotation</div>
             <div className="text-xs font-mono font-bold text-sky-400 mt-1">
               {loads.filter(l => l.vehicleCategory === 'RZ Mining').length} RZ Trips
             </div>
-            <div className="text-[9px] text-gray-500">Pit Rotation Queue</div>
+            <div className="text-[9px] text-gray-400">Position 1 Fixed</div>
           </div>
 
-          {/* Step 5: Dispatch */}
+          {/* Step 5: Gate Pass Outward */}
           <div
             onClick={() => onNavigate('gate_pass')}
             className="p-3 rounded-xl bg-[#141722] hover:bg-[#1a1f2e] border border-[#d4af37]/40 cursor-pointer transition-all group"
@@ -297,11 +299,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>5. Dispatch</span>
               <span className="text-gray-500 group-hover:text-white">➔</span>
             </div>
-            <div className="font-bold text-gray-200 truncate">Gate Pass Issued</div>
+            <div className="font-bold text-gray-200 truncate">Gate Pass Out</div>
             <div className="text-xs font-mono font-bold text-[#f3c64c] mt-1">
               {gatePasses.length} Dispatched
             </div>
-            <div className="text-[9px] text-gray-500">Deducts Stock & Out</div>
+            <div className="text-[9px] text-gray-400">Outward Gate Exit</div>
           </div>
 
           {/* Step 6: Delivery & Payment */}
@@ -317,7 +319,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
               {formatCurrency(metrics.customerCollections)}
             </div>
-            <div className="text-[9px] text-gray-500">Driver/Client Payment</div>
+            <div className="text-[9px] text-gray-400">Client Settlement</div>
           </div>
         </div>
       </div>
@@ -462,21 +464,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* 10. Current Stock (1st Quality) */}
+        {/* 10. Direct Loaded Today (Zero Physical Warehouse Stock) */}
         <div
           onClick={() => onNavigate('stock')}
-          className="p-3.5 sm:p-4 rounded-xl bg-[#12141c] border border-[#232736] hover:border-[#d4af37]/40 cursor-pointer transition-all shadow-sm"
+          className="p-3.5 sm:p-4 rounded-xl bg-[#12141c] border border-cyan-500/30 hover:border-cyan-400/60 cursor-pointer transition-all shadow-sm"
         >
           <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
-            <span>Stock (1st Quality)</span>
-            <Boxes className="w-4 h-4 text-[#d4af37]" />
+            <span className="text-cyan-400 font-semibold">Direct Loaded</span>
+            <PackageCheck className="w-4 h-4 text-cyan-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-black font-mono text-[#d4af37]">
-            {formatNumber(stock['Laterite Stone — 1st'])}{' '}
+          <div className="text-xl sm:text-2xl font-black font-mono text-cyan-300">
+            {formatNumber(metrics.totalQuantityPcs)}{' '}
             <span className="text-xs font-normal text-gray-400">pcs</span>
           </div>
-          <div className="text-[10px] text-gray-500 mt-0.5">
-            2nd: {formatNumber(stock['Laterite Stone — 2nd'])} pcs
+          <div className="text-[10px] text-emerald-400 mt-0.5">
+            + {metrics.totalQuantityLoads} loads · Zero Pit Stock
           </div>
         </div>
 
@@ -639,59 +641,90 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Right 1 Col: Quick Module Launchpad & Quarry Status */}
         <div className="space-y-4">
-          {/* Quarry Stock Summary Card */}
-          <div className="bg-[#12141a] rounded-2xl border border-[#232736] p-4 sm:p-5 shadow-sm space-y-3">
+          {/* Direct Loading & Dispatch Pipeline (Zero Physical Stock) */}
+          <div className="bg-[#12141a] rounded-2xl border border-cyan-500/30 p-4 sm:p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-cinzel font-bold text-sm text-gray-200">
-                Live Stock Status
-              </h3>
+              <div>
+                <h3 className="font-cinzel font-bold text-sm text-gray-200">
+                  Direct Loading Pipeline
+                </h3>
+                <span className="text-[10px] text-cyan-400 font-semibold block">
+                  Zero Closing Stock • Direct Pit Loading
+                </span>
+              </div>
               <button
                 onClick={() => onNavigate('stock')}
-                className="text-[11px] text-[#d4af37] hover:underline"
+                className="text-[11px] text-[#d4af37] hover:underline font-bold cursor-pointer"
               >
-                Stock Log →
+                Pipeline Log →
               </button>
             </div>
 
             <div className="space-y-2.5">
+              {/* 1st Quality Direct Load */}
               <div className="p-2.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-gray-200">Laterite Stone — 1st</div>
-                  <div className="text-[10px] text-gray-500">Standard cut (₹43 quarry / ₹65 sale)</div>
+                  <div className="text-xs font-bold text-gray-200">1st Quality (All 8 Edges)</div>
+                  <div className="text-[10px] text-gray-400">
+                    {activeQuarry?.id === 'quarry-001-b' ? '₹41' : '₹43'} Quarry Rate • Direct Loaded
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono font-bold text-sm text-[#f3c64c]">
-                    {formatNumber(stock['Laterite Stone — 1st'])} pcs
+                  <div className="font-mono font-bold text-sm text-cyan-400">
+                    {loads
+                      .filter((l) => l.material === 'Laterite Stone — 1st' && l.date === today)
+                      .reduce((sum, l) => sum + (l.vehicleReceivedQuantity || l.quantity || 0), 0)
+                      .toLocaleString()}{' '}
+                    pcs
                   </div>
-                  <div className="text-[9px] text-emerald-400">Available</div>
+                  <div className="text-[9px] text-emerald-400 font-medium">Direct Loaded</div>
                 </div>
               </div>
 
+              {/* 2nd Quality Direct Load */}
               <div className="p-2.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-gray-200">Laterite Stone — 2nd</div>
-                  <div className="text-[10px] text-gray-500">Standard cut (₹33 quarry / ₹55 sale)</div>
+                  <div className="text-xs font-bold text-gray-200">2nd Quality (~3/4 Edges)</div>
+                  <div className="text-[10px] text-gray-400">
+                    {activeQuarry?.id === 'quarry-001-b' ? '₹31' : '₹33'} Quarry Rate • Direct Loaded
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="font-mono font-bold text-sm text-gray-200">
-                    {formatNumber(stock['Laterite Stone — 2nd'])} pcs
+                    {loads
+                      .filter((l) => l.material === 'Laterite Stone — 2nd' && l.date === today)
+                      .reduce((sum, l) => sum + (l.vehicleReceivedQuantity || l.quantity || 0), 0)
+                      .toLocaleString()}{' '}
+                    pcs
                   </div>
-                  <div className="text-[9px] text-emerald-400">Available</div>
+                  <div className="text-[9px] text-emerald-400 font-medium">Direct Loaded</div>
                 </div>
               </div>
 
+              {/* 3rd / Mury / Latt Load */}
               <div className="p-2.5 rounded-xl bg-[#0b0c10] border border-[#1f2434] flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-gray-200">Laterite Stone — 3rd</div>
-                  <div className="text-[10px] text-gray-500">Rubble load (₹1,000 / ₹5,000)</div>
+                  <div className="text-xs font-bold text-gray-200">3rd / Mury & Latt Loads</div>
+                  <div className="text-[10px] text-gray-400">₹1,000 Mury / ₹2,500 Latt per load</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono font-bold text-sm text-gray-200">
-                    {stock['Laterite Stone — 3rd']} loads
+                  <div className="font-mono font-bold text-sm text-amber-300">
+                    {loads.filter(
+                      (l) =>
+                        (l.material === 'Laterite Stone — 3rd' ||
+                          l.material?.includes('3rd') ||
+                          l.material?.includes('Mury')) &&
+                        l.date === today
+                    ).length}{' '}
+                    loads
                   </div>
-                  <div className="text-[9px] text-emerald-400">Available</div>
+                  <div className="text-[9px] text-emerald-400 font-medium">Dispatched</div>
                 </div>
               </div>
+            </div>
+
+            <div className="p-2 rounded-lg bg-black/40 border border-[#1e2333] text-[10px] text-gray-400 leading-snug">
+              <span className="text-[#d4af37] font-semibold">Zero-Stock Rule:</span> No physical warehouse closing stock. When quarry work halts, stock is 0. Cut stone is loaded directly to vehicles.
             </div>
           </div>
 
