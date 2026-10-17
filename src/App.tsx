@@ -187,6 +187,7 @@ const QuarryAppInner: React.FC = () => {
           {/* 1. QUARRY MANAGEMENT MODULE */}
           {(currentTab === 'quarry_module' ||
             currentTab === 'quarry_mgmt' ||
+            currentTab === 'machinery' ||
             currentTab === 'production' ||
             currentTab === 'quality' ||
             currentTab === 'stock' ||
@@ -200,7 +201,9 @@ const QuarryAppInner: React.FC = () => {
             currentTab === 'payslips') && (
             <QuarryModuleView
               initialTab={
-                currentTab === 'production'
+                currentTab === 'machinery'
+                  ? 'machinery'
+                  : currentTab === 'production'
                   ? 'production'
                   : currentTab === 'quality'
                   ? 'quality'

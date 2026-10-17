@@ -37,6 +37,7 @@ import { useQuarry } from '../../context/QuarryContext';
 export type NavTab =
   | 'dashboard'
   | 'quarry_module'
+  | 'machinery'
   | 'vehicle_module'
   | 'order_module'
   | 'quarry_mgmt'
@@ -96,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { loads, gatePasses, stock, vehicles, customers } = useQuarry();
+  const { loads, gatePasses, stock, vehicles, customers, machines } = useQuarry();
 
   const totalDispatches = gatePasses.length;
   const activeLoads = loads.filter((l) => l.status === 'Draft' || l.status === 'Loaded').length;
@@ -108,6 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       color: 'text-[#f3c64c]',
       items: [
         { id: 'quarry_module', label: 'Quarry Operations Hub', icon: Mountain },
+        { id: 'machinery', label: 'Machinery & JCB Master', icon: Wrench, badge: machines.length },
         { id: 'production', label: 'Production Log', icon: PackageCheck },
         { id: 'quality', label: 'Quality & Grades', icon: Award },
         {

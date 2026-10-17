@@ -45,6 +45,18 @@ import {
   DriverCollection,
   DriverCollectionSettlementStatus,
   PaymentCollectionMode,
+  QuarryMachine,
+  JcbUsageRecord,
+  MachineRentContract,
+  DieselEntry,
+  OilEntry,
+  SparePartEntry,
+  BladeRecord,
+  MachineMaintenanceRecord,
+  VendorShop,
+  FoodPurchaseBill,
+  ToolsRoomRentRecord,
+  DailyMachineWorkLog,
 } from '../types/quarry';
 import {
   INITIAL_RATES,
@@ -74,6 +86,18 @@ import {
   INITIAL_BILLING_CONFIG,
   INITIAL_DRIVER_COLLECTIONS,
   generateNextRotationEngine,
+  INITIAL_MACHINES,
+  INITIAL_JCB_RECORDS,
+  INITIAL_RENT_CONTRACTS,
+  INITIAL_VENDORS,
+  INITIAL_DIESEL_ENTRIES,
+  INITIAL_OIL_ENTRIES,
+  INITIAL_SPARE_ENTRIES,
+  INITIAL_BLADES,
+  INITIAL_MAINTENANCE_RECORDS,
+  INITIAL_FOOD_PURCHASES,
+  INITIAL_TOOLS_RENT,
+  INITIAL_MACHINE_WORK_LOGS,
 } from '../data/seedData';
 import { padGatePassNumber, padLoadNumber, getTodayDateString, getCurrentTimeString } from '../utils/formatters';
 
@@ -206,7 +230,10 @@ interface QuarryContextType {
   // Daily Production & Recovery Engine (Zero Warehouse Stock Model)
   dailyProductionRecords: QuarryDailyProductionRecord[];
   addDailyProductionRecord: (
-    record: Omit<QuarryDailyProductionRecord, 'id' | 'createdAt'> & { id?: string }
+    record: Omit<QuarryDailyProductionRecord, 'id' | 'createdAt' | 'productionId'> & {
+      id?: string;
+      productionId?: string;
+    }
   ) => QuarryDailyProductionRecord;
   updateDailyProductionRecord: (id: string, updates: Partial<QuarryDailyProductionRecord>) => void;
   deleteDailyProductionRecord: (id: string) => void;
@@ -217,7 +244,7 @@ interface QuarryContextType {
   roundLogs: QuarryRoundLog[];
   updateGapSlotVehicle: (gapNumber: GapSlotNumber, vehicleId: string) => void;
   offerGapLoad: (
-    offeredQuality: '1ST QUALITY' | '2ND QUALITY' | 'LATT / 3RD' | 'MURY',
+    offeredQuality: OperationalQuality,
     currentGap: GapSlotNumber,
     accepted: boolean,
     rejectionReason?: string
@@ -225,6 +252,78 @@ interface QuarryContextType {
   recordRoundEvent: (round: Omit<QuarryRoundLog, 'id'> & { id?: string }) => QuarryRoundLog;
   completeVehicleReturn: (vehicleNumber: string, returnTime?: string) => void;
   advanceGapRound: () => void;
+
+  // PROMPT 3: Quarry Machinery, JCB, Spares & Rent Management
+  machines: QuarryMachine[];
+  addMachine: (machine: Omit<QuarryMachine, 'id' | 'createdAt'> & { id?: string }) => QuarryMachine;
+  updateMachine: (id: string, updates: Partial<QuarryMachine>) => void;
+  replaceMachine: (
+    oldMachineId: string,
+    newMachine: Omit<QuarryMachine, 'id' | 'createdAt'> & { id?: string }
+  ) => { oldMachine: QuarryMachine; newMachine: QuarryMachine };
+  deactivateMachine: (id: string, reason?: string) => void;
+
+  jcbRecords: JcbUsageRecord[];
+  addJcbRecord: (
+    record: Omit<JcbUsageRecord, 'id' | 'createdAt' | 'totalHours' | 'totalAmount'> & {
+      id?: string;
+      totalHours?: number;
+      totalAmount?: number;
+    }
+  ) => JcbUsageRecord;
+  updateJcbRecord: (id: string, updates: Partial<JcbUsageRecord>) => void;
+  deleteJcbRecord: (id: string) => void;
+
+  rentContracts: MachineRentContract[];
+  addRentContract: (contract: Omit<MachineRentContract, 'id' | 'createdAt'> & { id?: string }) => MachineRentContract;
+  updateRentContract: (id: string, updates: Partial<MachineRentContract>) => void;
+  settleRentContract: (id: string, amount: number) => void;
+
+  dieselEntries: DieselEntry[];
+  addDieselEntry: (entry: Omit<DieselEntry, 'id' | 'createdAt' | 'amount'> & { id?: string; amount?: number }) => DieselEntry;
+  deleteDieselEntry: (id: string) => void;
+
+  oilEntries: OilEntry[];
+  addOilEntry: (entry: Omit<OilEntry, 'id' | 'createdAt' | 'amount'> & { id?: string; amount?: number }) => OilEntry;
+  deleteOilEntry: (id: string) => void;
+
+  sparePartEntries: SparePartEntry[];
+  addSparePartEntry: (entry: Omit<SparePartEntry, 'id' | 'createdAt' | 'amount'> & { id?: string; amount?: number }) => SparePartEntry;
+  deleteSparePartEntry: (id: string) => void;
+
+  bladeRecords: BladeRecord[];
+  addBladeRecord: (
+    blade: Omit<BladeRecord, 'id' | 'createdAt' | 'bladeId'> & {
+      id?: string;
+      bladeId?: string;
+    }
+  ) => BladeRecord;
+  updateBladeRecord: (id: string, updates: Partial<BladeRecord>) => void;
+
+  maintenanceRecords: MachineMaintenanceRecord[];
+  addMaintenanceRecord: (
+    record: Omit<MachineMaintenanceRecord, 'id' | 'createdAt' | 'maintenanceId' | 'totalCost'> & {
+      id?: string;
+      maintenanceId?: string;
+      totalCost?: number;
+    }
+  ) => MachineMaintenanceRecord;
+  deleteMaintenanceRecord: (id: string) => void;
+
+  vendors: VendorShop[];
+  addVendor: (vendor: Omit<VendorShop, 'id' | 'createdAt'> & { id?: string }) => VendorShop;
+  updateVendor: (id: string, updates: Partial<VendorShop>) => void;
+
+  foodPurchases: FoodPurchaseBill[];
+  addFoodPurchase: (bill: Omit<FoodPurchaseBill, 'id' | 'createdAt'> & { id?: string }) => FoodPurchaseBill;
+  deleteFoodPurchase: (id: string) => void;
+
+  toolsRoomRent: ToolsRoomRentRecord[];
+  addToolsRoomRent: (rent: Omit<ToolsRoomRentRecord, 'id' | 'createdAt'> & { id?: string }) => ToolsRoomRentRecord;
+  settleToolsRoomRent: (id: string, paidAmount: number) => void;
+
+  machineWorkLogs: DailyMachineWorkLog[];
+  addMachineWorkLog: (log: Omit<DailyMachineWorkLog, 'id' | 'createdAt'> & { id?: string }) => DailyMachineWorkLog;
 
   resetAllData: () => void;
   exportBackupJSON: () => string;
@@ -425,6 +524,78 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : (INITIAL_ROUND_LOGS || []);
   });
 
+  // Prompt 3: Machinery Master State
+  const [machines, setMachines] = useState<QuarryMachine[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_machines`);
+    return saved ? JSON.parse(saved) : (INITIAL_MACHINES || []);
+  });
+
+  // JCB Usage & Hour Readings State
+  const [jcbRecords, setJcbRecords] = useState<JcbUsageRecord[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_jcb_records`);
+    return saved ? JSON.parse(saved) : (INITIAL_JCB_RECORDS || []);
+  });
+
+  // Machine Rent Contracts State
+  const [rentContracts, setRentContracts] = useState<MachineRentContract[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_rent_contracts`);
+    return saved ? JSON.parse(saved) : (INITIAL_RENT_CONTRACTS || []);
+  });
+
+  // Vendor / Shop Master State
+  const [vendors, setVendors] = useState<VendorShop[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_vendors`);
+    return saved ? JSON.parse(saved) : (INITIAL_VENDORS || []);
+  });
+
+  // Diesel Entries State (Machine vs Vehicle vs JCB Reimbursed)
+  const [dieselEntries, setDieselEntries] = useState<DieselEntry[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_diesel_entries`);
+    return saved ? JSON.parse(saved) : (INITIAL_DIESEL_ENTRIES || []);
+  });
+
+  // Oil Entries State
+  const [oilEntries, setOilEntries] = useState<OilEntry[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_oil_entries`);
+    return saved ? JSON.parse(saved) : (INITIAL_OIL_ENTRIES || []);
+  });
+
+  // Spare Parts Entries State
+  const [sparePartEntries, setSparePartEntries] = useState<SparePartEntry[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_spare_entries`);
+    return saved ? JSON.parse(saved) : (INITIAL_SPARE_ENTRIES || []);
+  });
+
+  // Blade Master & Life Tracking State
+  const [bladeRecords, setBladeRecords] = useState<BladeRecord[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_blade_records`);
+    return saved ? JSON.parse(saved) : (INITIAL_BLADES || []);
+  });
+
+  // Machine Maintenance Records State
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MachineMaintenanceRecord[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_maintenance_records`);
+    return saved ? JSON.parse(saved) : (INITIAL_MAINTENANCE_RECORDS || []);
+  });
+
+  // Food Purchases (Worker Welfare) State
+  const [foodPurchases, setFoodPurchases] = useState<FoodPurchaseBill[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_food_purchases`);
+    return saved ? JSON.parse(saved) : (INITIAL_FOOD_PURCHASES || []);
+  });
+
+  // Tools Room Rent State
+  const [toolsRoomRent, setToolsRoomRent] = useState<ToolsRoomRentRecord[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_tools_rent`);
+    return saved ? JSON.parse(saved) : (INITIAL_TOOLS_RENT || []);
+  });
+
+  // Daily Machine Work Logs State
+  const [machineWorkLogs, setMachineWorkLogs] = useState<DailyMachineWorkLog[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_machine_work_logs`);
+    return saved ? JSON.parse(saved) : (INITIAL_MACHINE_WORK_LOGS || []);
+  });
+
   // Sync state to local cache for instant offline fallback
   useEffect(() => {
     try {
@@ -457,6 +628,18 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       localStorage.setItem(`${STORAGE_KEY}_gap_queue`, JSON.stringify(gapQueue));
       localStorage.setItem(`${STORAGE_KEY}_gap_offer_events`, JSON.stringify(gapOfferEvents));
       localStorage.setItem(`${STORAGE_KEY}_round_logs`, JSON.stringify(roundLogs));
+      localStorage.setItem(`${STORAGE_KEY}_machines`, JSON.stringify(machines));
+      localStorage.setItem(`${STORAGE_KEY}_jcb_records`, JSON.stringify(jcbRecords));
+      localStorage.setItem(`${STORAGE_KEY}_rent_contracts`, JSON.stringify(rentContracts));
+      localStorage.setItem(`${STORAGE_KEY}_vendors`, JSON.stringify(vendors));
+      localStorage.setItem(`${STORAGE_KEY}_diesel_entries`, JSON.stringify(dieselEntries));
+      localStorage.setItem(`${STORAGE_KEY}_oil_entries`, JSON.stringify(oilEntries));
+      localStorage.setItem(`${STORAGE_KEY}_spare_entries`, JSON.stringify(sparePartEntries));
+      localStorage.setItem(`${STORAGE_KEY}_blade_records`, JSON.stringify(bladeRecords));
+      localStorage.setItem(`${STORAGE_KEY}_maintenance_records`, JSON.stringify(maintenanceRecords));
+      localStorage.setItem(`${STORAGE_KEY}_food_purchases`, JSON.stringify(foodPurchases));
+      localStorage.setItem(`${STORAGE_KEY}_tools_rent`, JSON.stringify(toolsRoomRent));
+      localStorage.setItem(`${STORAGE_KEY}_machine_work_logs`, JSON.stringify(machineWorkLogs));
     } catch (e) {
       console.warn('Cache error:', e);
     }
@@ -490,6 +673,18 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     gapQueue,
     gapOfferEvents,
     roundLogs,
+    machines,
+    jcbRecords,
+    rentContracts,
+    vendors,
+    dieselEntries,
+    oilEntries,
+    sparePartEntries,
+    bladeRecords,
+    maintenanceRecords,
+    foodPurchases,
+    toolsRoomRent,
+    machineWorkLogs,
   ]);
 
   // Refresh data from shared backend database
@@ -2215,7 +2410,12 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Daily Production Record actions
   const addDailyProductionRecord = useCallback(
-    (recordData: Omit<QuarryDailyProductionRecord, 'id' | 'createdAt'> & { id?: string }): QuarryDailyProductionRecord => {
+    (
+      recordData: Omit<QuarryDailyProductionRecord, 'id' | 'createdAt' | 'productionId'> & {
+        id?: string;
+        productionId?: string;
+      }
+    ): QuarryDailyProductionRecord => {
       const id = recordData.id || `prd-${Date.now()}`;
       const cut = Number(recordData.totalCutQuantity) || 0;
       const finished = Number(recordData.finishedQuantity) || 0;
@@ -2315,7 +2515,7 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const offerGapLoad = useCallback(
     (
-      offeredQuality: '1ST QUALITY' | '2ND QUALITY' | 'LATT / 3RD' | 'MURY',
+      offeredQuality: OperationalQuality,
       currentGap: GapSlotNumber,
       accepted: boolean,
       rejectionReason?: string
@@ -2436,6 +2636,537 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, []);
 
+  // =========================================================================
+  // PROMPT 3: QUARRY MACHINERY, JCB, SPARES & RENT MANAGEMENT CALLBACKS
+  // =========================================================================
+
+  const addMachine = useCallback(
+    (machineData: Omit<QuarryMachine, 'id' | 'createdAt'> & { id?: string }): QuarryMachine => {
+      const id = machineData.id || `mch-${Date.now()}`;
+      const newMachine: QuarryMachine = {
+        ...machineData,
+        id,
+        machineId: machineData.machineId || `MCH-${String(machines.length + 1).padStart(2, '0')}`,
+        createdAt: new Date().toISOString(),
+      };
+      setMachines((prev) => [newMachine, ...prev]);
+      return newMachine;
+    },
+    [machines.length]
+  );
+
+  const updateMachine = useCallback((id: string, updates: Partial<QuarryMachine>) => {
+    setMachines((prev) =>
+      prev.map((m) =>
+        m.id === id || m.machineId === id
+          ? { ...m, ...updates, updatedAt: new Date().toISOString() }
+          : m
+      )
+    );
+  }, []);
+
+  const replaceMachine = useCallback(
+    (
+      oldMachineId: string,
+      newMachineData: Omit<QuarryMachine, 'id' | 'createdAt'> & { id?: string }
+    ) => {
+      const newId = newMachineData.id || `mch-${Date.now()}`;
+      const newMachineId = newMachineData.machineId || `MCH-REP-${Date.now().toString().slice(-4)}`;
+      const replacementDate = getTodayDateString();
+
+      const newMachine: QuarryMachine = {
+        ...newMachineData,
+        id: newId,
+        machineId: newMachineId,
+        createdAt: new Date().toISOString(),
+        notes: `${newMachineData.notes || ''} (Replaced former machine: ${oldMachineId})`,
+      };
+
+      let retiredMachine: QuarryMachine | undefined;
+
+      setMachines((prev) => {
+        const updated = prev.map((m) => {
+          if (m.id === oldMachineId || m.machineId === oldMachineId) {
+            retiredMachine = {
+              ...m,
+              currentStatus: 'Retired' as const,
+              active: false,
+              replacedByMachineId: newMachineId,
+              replacementDate,
+              notes: `${m.notes || ''} [Retired & replaced by ${newMachineId} on ${replacementDate}. Historical machine expenses preserved.]`,
+              updatedAt: new Date().toISOString(),
+            };
+            return retiredMachine;
+          }
+          return m;
+        });
+        return [newMachine, ...updated];
+      });
+
+      return {
+        oldMachine: retiredMachine || (machines.find((m) => m.id === oldMachineId || m.machineId === oldMachineId) as QuarryMachine),
+        newMachine,
+      };
+    },
+    [machines]
+  );
+
+  const deactivateMachine = useCallback((id: string, reason?: string) => {
+    setMachines((prev) =>
+      prev.map((m) =>
+        m.id === id || m.machineId === id
+          ? {
+              ...m,
+              active: false,
+              currentStatus: 'Inactive' as const,
+              notes: `${m.notes || ''} [Deactivated: ${reason || 'Operator decommissioned'}]`,
+              updatedAt: new Date().toISOString(),
+            }
+          : m
+      )
+    );
+  }, []);
+
+  const addJcbRecord = useCallback(
+    (
+      recordData: Omit<JcbUsageRecord, 'id' | 'createdAt' | 'totalHours' | 'totalAmount'> & {
+        id?: string;
+        totalHours?: number;
+        totalAmount?: number;
+      }
+    ): JcbUsageRecord => {
+      const start = Number(recordData.startHourReading) || 0;
+      const end = Number(recordData.endHourReading) || 0;
+      if (end < start) {
+        throw new Error(
+          `End hour reading (${end}) cannot be less than start hour reading (${start}). Please verify the meter gauge.`
+        );
+      }
+      const totalHours =
+        recordData.totalHours !== undefined
+          ? recordData.totalHours
+          : Math.round((end - start) * 10) / 10;
+      const ratePerHour = recordData.ratePerHour || 1400; // Standard JCB rate = ₹1,400/hr
+      const totalAmount =
+        recordData.totalAmount !== undefined ? recordData.totalAmount : totalHours * ratePerHour;
+
+      const newRecord: JcbUsageRecord = {
+        ...recordData,
+        id: recordData.id || `jcb-rec-${Date.now()}`,
+        startHourReading: start,
+        endHourReading: end,
+        totalHours,
+        ratePerHour,
+        totalAmount,
+        createdAt: new Date().toISOString(),
+      };
+
+      setJcbRecords((prev) => [newRecord, ...prev]);
+
+      // If JCB diesel was paid by Quarry (reimbursed), register an explicit Quarry Expense transaction
+      if (
+        recordData.dieselResponsibility === 'Quarry Reimbursed' &&
+        (recordData.reimbursedDieselAmount || 0) > 0
+      ) {
+        const expenseAmount = Number(recordData.reimbursedDieselAmount) || 0;
+        const newExpense: QuarryExpense = {
+          id: `qexp-jcb-${Date.now()}`,
+          date: recordData.date || getTodayDateString(),
+          category: 'Diesel',
+          description: `JCB Reimbursed Fuel: ${recordData.jcbName} (${expenseAmount} INR paid by Quarry under agreement)`,
+          amount: expenseAmount,
+          enteredBy: currentUser,
+          paymentMode: 'Cash',
+          quarryId: recordData.quarryId || activeQuarryId,
+          createdAt: new Date().toISOString(),
+        };
+        setExpenses((prev) => [newExpense, ...prev]);
+      }
+
+      // Update current hour reading on machine record
+      setMachines((prev) =>
+        prev.map((m) =>
+          m.id === recordData.jcbId || m.machineId === recordData.jcbId
+            ? {
+                ...m,
+                currentHourReading: Math.max(m.currentHourReading || 0, end),
+                updatedAt: new Date().toISOString(),
+              }
+            : m
+        )
+      );
+
+      return newRecord;
+    },
+    [currentUser, activeQuarryId]
+  );
+
+  const updateJcbRecord = useCallback((id: string, updates: Partial<JcbUsageRecord>) => {
+    setJcbRecords((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          const start =
+            updates.startHourReading !== undefined
+              ? Number(updates.startHourReading)
+              : r.startHourReading;
+          const end =
+            updates.endHourReading !== undefined ? Number(updates.endHourReading) : r.endHourReading;
+          const totalHours =
+            updates.totalHours !== undefined
+              ? updates.totalHours
+              : Math.max(0, Math.round((end - start) * 10) / 10);
+          const ratePerHour = updates.ratePerHour || r.ratePerHour || 1400;
+          const totalAmount =
+            updates.totalAmount !== undefined ? updates.totalAmount : totalHours * ratePerHour;
+          return {
+            ...r,
+            ...updates,
+            startHourReading: start,
+            endHourReading: end,
+            totalHours,
+            ratePerHour,
+            totalAmount,
+          };
+        }
+        return r;
+      })
+    );
+  }, []);
+
+  const deleteJcbRecord = useCallback((id: string) => {
+    setJcbRecords((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  const addRentContract = useCallback(
+    (
+      contractData: Omit<MachineRentContract, 'id' | 'createdAt'> & { id?: string }
+    ): MachineRentContract => {
+      const newContract: MachineRentContract = {
+        ...contractData,
+        id: contractData.id || `mrc-${Date.now()}`,
+        contractId:
+          contractData.contractId ||
+          `MRC-2026-${String(rentContracts.length + 1).padStart(3, '0')}`,
+        createdAt: new Date().toISOString(),
+      };
+      setRentContracts((prev) => [newContract, ...prev]);
+      return newContract;
+    },
+    [rentContracts.length]
+  );
+
+  const updateRentContract = useCallback((id: string, updates: Partial<MachineRentContract>) => {
+    setRentContracts((prev) =>
+      prev.map((c) => (c.id === id || c.contractId === id ? { ...c, ...updates } : c))
+    );
+  }, []);
+
+  const settleRentContract = useCallback((id: string, paidAmount: number) => {
+    setRentContracts((prev) =>
+      prev.map((c) => {
+        if (c.id === id || c.contractId === id) {
+          const newPaid = (c.paidRent || 0) + paidAmount;
+          const newBal = Math.max(0, (c.accruedRent || 0) - newPaid);
+          const status = newBal === 0 ? ('PAID' as const) : ('PARTIAL' as const);
+          return { ...c, paidRent: newPaid, outstandingBalance: newBal, paymentStatus: status };
+        }
+        return c;
+      })
+    );
+  }, []);
+
+  const addDieselEntry = useCallback(
+    (entryData: Omit<DieselEntry, 'id' | 'createdAt' | 'amount'> & { id?: string; amount?: number }): DieselEntry => {
+      const qty = Number(entryData.quantityLiters) || 0;
+      const rate = Number(entryData.ratePerLiter) || 0;
+      const amount = entryData.amount !== undefined ? entryData.amount : qty * rate;
+      const newEntry: DieselEntry = {
+        ...entryData,
+        id: entryData.id || `dsl-${Date.now()}`,
+        quantityLiters: qty,
+        ratePerLiter: rate,
+        amount,
+        createdAt: new Date().toISOString(),
+      };
+      setDieselEntries((prev) => [newEntry, ...prev]);
+
+      // Automatically sync into Quarry Expenses if it's a quarry machine or reimbursed
+      if (entryData.targetType === 'Quarry Machine') {
+        const mode: PaymentMode =
+          entryData.paymentMethod === 'Cash' ? 'Cash' : entryData.paymentMethod === 'UPI' ? 'UPI' : 'Bank';
+        const qExp: QuarryExpense = {
+          id: `qexp-dsl-${Date.now()}`,
+          date: entryData.date || getTodayDateString(),
+          category: 'Diesel',
+          description: `Machine Diesel: ${entryData.machineName || 'Quarry Machine'} (${qty}L @ ₹${rate}/L)`,
+          amount,
+          enteredBy: currentUser,
+          paymentMode: mode,
+          quarryId: entryData.quarryId || activeQuarryId,
+          createdAt: new Date().toISOString(),
+        };
+        setExpenses((prev) => [qExp, ...prev]);
+      }
+
+      return newEntry;
+    },
+    [currentUser, activeQuarryId]
+  );
+
+  const deleteDieselEntry = useCallback((id: string) => {
+    setDieselEntries((prev) => prev.filter((d) => d.id !== id));
+  }, []);
+
+  const addOilEntry = useCallback(
+    (entryData: Omit<OilEntry, 'id' | 'createdAt' | 'amount'> & { id?: string; amount?: number }): OilEntry => {
+      const qty = Number(entryData.quantityLiters) || 0;
+      const rate = Number(entryData.ratePerLiter) || 0;
+      const amount = entryData.amount !== undefined ? entryData.amount : qty * rate;
+      const newEntry: OilEntry = {
+        ...entryData,
+        id: entryData.id || `oil-${Date.now()}`,
+        quantityLiters: qty,
+        ratePerLiter: rate,
+        amount,
+        createdAt: new Date().toISOString(),
+      };
+      setOilEntries((prev) => [newEntry, ...prev]);
+
+      // Record in Quarry Expenses
+      const qExp: QuarryExpense = {
+        id: `qexp-oil-${Date.now()}`,
+        date: entryData.date || getTodayDateString(),
+        category: 'Maintenance',
+        description: `${entryData.oilType} for ${entryData.machineName} (${qty}L)`,
+        amount,
+        enteredBy: currentUser,
+        paymentMode: 'Cash',
+        quarryId: entryData.quarryId || activeQuarryId,
+        createdAt: new Date().toISOString(),
+      };
+      setExpenses((prev) => [qExp, ...prev]);
+
+      return newEntry;
+    },
+    [currentUser, activeQuarryId]
+  );
+
+  const deleteOilEntry = useCallback((id: string) => {
+    setOilEntries((prev) => prev.filter((o) => o.id !== id));
+  }, []);
+
+  const addSparePartEntry = useCallback(
+    (entryData: Omit<SparePartEntry, 'id' | 'createdAt' | 'amount'> & { id?: string; amount?: number }): SparePartEntry => {
+      const qty = Number(entryData.quantity) || 1;
+      const rate = Number(entryData.rate) || 0;
+      const amount = entryData.amount !== undefined ? entryData.amount : qty * rate;
+      const newEntry: SparePartEntry = {
+        ...entryData,
+        id: entryData.id || `spr-${Date.now()}`,
+        quantity: qty,
+        rate,
+        amount,
+        createdAt: new Date().toISOString(),
+      };
+      setSparePartEntries((prev) => [newEntry, ...prev]);
+
+      // Record in Quarry Expenses
+      const qExp: QuarryExpense = {
+        id: `qexp-spr-${Date.now()}`,
+        date: entryData.date || getTodayDateString(),
+        category: 'Spare Parts',
+        description: `Spares for ${entryData.machineName}: ${entryData.partName} (${qty} ${entryData.unit})`,
+        amount,
+        enteredBy: currentUser,
+        paymentMode: 'Cash',
+        quarryId: entryData.quarryId || activeQuarryId,
+        createdAt: new Date().toISOString(),
+      };
+      setExpenses((prev) => [qExp, ...prev]);
+
+      return newEntry;
+    },
+    [currentUser, activeQuarryId]
+  );
+
+  const deleteSparePartEntry = useCallback((id: string) => {
+    setSparePartEntries((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
+  const addBladeRecord = useCallback(
+    (
+      bladeData: Omit<BladeRecord, 'id' | 'createdAt' | 'bladeId'> & {
+        id?: string;
+        bladeId?: string;
+      }
+    ): BladeRecord => {
+      const newBlade: BladeRecord = {
+        ...bladeData,
+        id: bladeData.id || `bld-${Date.now()}`,
+        bladeId: bladeData.bladeId || `BLD-2026-${String(bladeRecords.length + 1).padStart(3, '0')}`,
+        createdAt: new Date().toISOString(),
+      };
+      setBladeRecords((prev) => [newBlade, ...prev]);
+      return newBlade;
+    },
+    [bladeRecords.length]
+  );
+
+  const updateBladeRecord = useCallback((id: string, updates: Partial<BladeRecord>) => {
+    setBladeRecords((prev) =>
+      prev.map((b) => (b.id === id || b.bladeId === id ? { ...b, ...updates } : b))
+    );
+  }, []);
+
+  const addMaintenanceRecord = useCallback(
+    (
+      recordData: Omit<MachineMaintenanceRecord, 'id' | 'createdAt' | 'maintenanceId' | 'totalCost'> & {
+        id?: string;
+        maintenanceId?: string;
+        totalCost?: number;
+      }
+    ): MachineMaintenanceRecord => {
+      const labour = Number(recordData.labourCost) || 0;
+      const parts = Number(recordData.partsCost) || 0;
+      const totalCost = recordData.totalCost !== undefined ? recordData.totalCost : labour + parts;
+      const newRecord: MachineMaintenanceRecord = {
+        ...recordData,
+        id: recordData.id || `mnt-${Date.now()}`,
+        maintenanceId:
+          recordData.maintenanceId ||
+          `MNT-2026-${String(maintenanceRecords.length + 1).padStart(3, '0')}`,
+        labourCost: labour,
+        partsCost: parts,
+        totalCost,
+        createdAt: new Date().toISOString(),
+      };
+      setMaintenanceRecords((prev) => [newRecord, ...prev]);
+
+      // Record in Quarry Expenses
+      const qExp: QuarryExpense = {
+        id: `qexp-mnt-${Date.now()}`,
+        date: recordData.date || getTodayDateString(),
+        category: 'Maintenance',
+        description: `${recordData.maintenanceType} Maintenance: ${recordData.machineName} (${recordData.description})`,
+        amount: totalCost,
+        enteredBy: currentUser,
+        paymentMode: 'Cash',
+        quarryId: recordData.quarryId || activeQuarryId,
+        createdAt: new Date().toISOString(),
+      };
+      setExpenses((prev) => [qExp, ...prev]);
+
+      return newRecord;
+    },
+    [maintenanceRecords.length, currentUser, activeQuarryId]
+  );
+
+  const deleteMaintenanceRecord = useCallback((id: string) => {
+    setMaintenanceRecords((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  const addVendor = useCallback(
+    (vendorData: Omit<VendorShop, 'id' | 'createdAt'> & { id?: string }): VendorShop => {
+      const newVendor: VendorShop = {
+        ...vendorData,
+        id: vendorData.id || `vnd-${Date.now()}`,
+        vendorId: vendorData.vendorId || `VND-${String(vendors.length + 1).padStart(3, '0')}`,
+        createdAt: new Date().toISOString(),
+      };
+      setVendors((prev) => [newVendor, ...prev]);
+      return newVendor;
+    },
+    [vendors.length]
+  );
+
+  const updateVendor = useCallback((id: string, updates: Partial<VendorShop>) => {
+    setVendors((prev) => prev.map((v) => (v.id === id || v.vendorId === id ? { ...v, ...updates } : v)));
+  }, []);
+
+  const addFoodPurchase = useCallback(
+    (billData: Omit<FoodPurchaseBill, 'id' | 'createdAt'> & { id?: string }): FoodPurchaseBill => {
+      const newBill: FoodPurchaseBill = {
+        ...billData,
+        id: billData.id || `fpb-${Date.now()}`,
+        amount: Number(billData.amount) || 0,
+        createdAt: new Date().toISOString(),
+      };
+      setFoodPurchases((prev) => [newBill, ...prev]);
+
+      // Add to Quarry Expenses under Food / Mess
+      const foodMode: PaymentMode = billData.paymentMethod === 'Cash' ? 'Cash' : 'Bank';
+      const qExp: QuarryExpense = {
+        id: `qexp-food-${Date.now()}`,
+        date: billData.date || getTodayDateString(),
+        category: 'Food/Kitchen',
+        description: `Worker Mess Provisions: ${billData.shopOrVendor} (${billData.items})`,
+        amount: Number(billData.amount) || 0,
+        enteredBy: currentUser,
+        paymentMode: foodMode,
+        quarryId: billData.quarryId || activeQuarryId,
+        createdAt: new Date().toISOString(),
+      };
+      setExpenses((prev) => [qExp, ...prev]);
+
+      return newBill;
+    },
+    [currentUser, activeQuarryId]
+  );
+
+  const deleteFoodPurchase = useCallback((id: string) => {
+    setFoodPurchases((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
+  const addToolsRoomRent = useCallback(
+    (rentData: Omit<ToolsRoomRentRecord, 'id' | 'createdAt'> & { id?: string }): ToolsRoomRentRecord => {
+      const due = Number(rentData.rentDue) || rentData.monthlyRate || 2000;
+      const paid = Number(rentData.paid) || 0;
+      const newRecord: ToolsRoomRentRecord = {
+        ...rentData,
+        id: rentData.id || `trr-${Date.now()}`,
+        monthlyRate: rentData.monthlyRate || 2000,
+        rentDue: due,
+        paid,
+        outstanding: Math.max(0, due - paid),
+        createdAt: new Date().toISOString(),
+      };
+      setToolsRoomRent((prev) => [newRecord, ...prev]);
+      return newRecord;
+    },
+    []
+  );
+
+  const settleToolsRoomRent = useCallback((id: string, paidAmount: number) => {
+    setToolsRoomRent((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          const newPaid = (r.paid || 0) + paidAmount;
+          const newOutstanding = Math.max(0, (r.rentDue || 0) - newPaid);
+          return {
+            ...r,
+            paid: newPaid,
+            outstanding: newOutstanding,
+            paymentDate: getTodayDateString(),
+          };
+        }
+        return r;
+      })
+    );
+  }, []);
+
+  const addMachineWorkLog = useCallback(
+    (logData: Omit<DailyMachineWorkLog, 'id' | 'createdAt'> & { id?: string }): DailyMachineWorkLog => {
+      const newLog: DailyMachineWorkLog = {
+        ...logData,
+        id: logData.id || `mwl-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      };
+      setMachineWorkLogs((prev) => [newLog, ...prev]);
+      return newLog;
+    },
+    []
+  );
+
   return (
     <QuarryContext.Provider
       value={{
@@ -2541,6 +3272,45 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         recordRoundEvent,
         completeVehicleReturn,
         advanceGapRound,
+        machines,
+        addMachine,
+        updateMachine,
+        replaceMachine,
+        deactivateMachine,
+        jcbRecords,
+        addJcbRecord,
+        updateJcbRecord,
+        deleteJcbRecord,
+        rentContracts,
+        addRentContract,
+        updateRentContract,
+        settleRentContract,
+        dieselEntries,
+        addDieselEntry,
+        deleteDieselEntry,
+        oilEntries,
+        addOilEntry,
+        deleteOilEntry,
+        sparePartEntries,
+        addSparePartEntry,
+        deleteSparePartEntry,
+        bladeRecords,
+        addBladeRecord,
+        updateBladeRecord,
+        maintenanceRecords,
+        addMaintenanceRecord,
+        deleteMaintenanceRecord,
+        vendors,
+        addVendor,
+        updateVendor,
+        foodPurchases,
+        addFoodPurchase,
+        deleteFoodPurchase,
+        toolsRoomRent,
+        addToolsRoomRent,
+        settleToolsRoomRent,
+        machineWorkLogs,
+        addMachineWorkLog,
         resetAllData,
         exportBackupJSON,
         importBackupJSON,

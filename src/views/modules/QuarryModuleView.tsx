@@ -6,6 +6,7 @@ import { formatCurrency } from '../../utils/formatters';
 // Existing Views
 import { ProductionView } from '../ProductionView';
 import { DailyGapEngineView } from '../DailyGapEngineView';
+import { QuarryMachineryView } from '../QuarryMachineryView';
 import { StockView } from '../StockView';
 import { GatePassView } from '../GatePassView';
 import { QuarryExpensesView } from '../QuarryExpensesView';
@@ -31,11 +32,13 @@ import {
   ShieldCheck,
   TrendingUp,
   Repeat,
+  Wrench,
 } from 'lucide-react';
 
 export type QuarrySubTab =
   | 'production'
   | 'gap'
+  | 'machinery'
   | 'quality'
   | 'stock'
   | 'gate'
@@ -72,6 +75,7 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
     payrolls,
     gatePasses,
     rates,
+    machines,
   } = useQuarry();
 
   const [activeTab, setActiveTab] = useState<QuarrySubTab>(initialTab);
@@ -91,6 +95,7 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
   const subTabs = [
     { id: 'production', label: 'Production Log', icon: PackageCheck, badge: `${dailyProductionRecords.length || production.length}` },
     { id: 'gap', label: 'Daily Gap Engine', icon: Repeat, badge: 'Pos 1 Fixed' },
+    { id: 'machinery', label: 'Machinery & JCB', icon: Wrench, badge: `${machines.length}` },
     { id: 'quality', label: 'Quality & Grades', icon: Award },
     { id: 'stock', label: 'Throughput & Pipeline', icon: Boxes },
     { id: 'gate', label: 'Gate Management', icon: Ticket, badge: `${gatePasses.length}` },
@@ -227,6 +232,8 @@ export const QuarryModuleView: React.FC<QuarryModuleViewProps> = ({
         )}
 
         {activeTab === 'gap' && <DailyGapEngineView />}
+
+        {activeTab === 'machinery' && <QuarryMachineryView />}
 
         {activeTab === 'quality' && (
           <div className="space-y-5">

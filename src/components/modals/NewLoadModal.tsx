@@ -350,7 +350,13 @@ export const NewLoadModal: React.FC<NewLoadModalProps> = ({
             >
               <option value="">-- Manual Direct Load (No Prior Booking) --</option>
               {orders
-                .filter((o) => o.status === 'Booked' || o.status === 'Pending Production')
+                .filter(
+                  (o) =>
+                    o.status === 'CONFIRMED' ||
+                    o.status === 'ALLOCATED' ||
+                    o.status === 'READY FOR LOADING' ||
+                    o.status === 'NEW'
+                )
                 .map((ord) => (
                   <option key={ord.id} value={ord.id}>
                     {ord.orderId} • {ord.customer} — {ord.quality} ({ord.quantity} pcs @ ₹{ord.rate}) • {ord.deliveryLocation}

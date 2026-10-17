@@ -643,7 +643,7 @@ export interface GapOfferEvent {
   timestamp: string;
   roundNumber: number;
   productionRecordId?: string;
-  offeredQuality: '1ST QUALITY' | '2ND QUALITY' | 'LATT / 3RD' | 'MURY';
+  offeredQuality: OperationalQuality | '1ST QUALITY' | '2ND QUALITY' | 'LATT / 3RD' | 'MURY';
   offeredToGap: GapSlotNumber;
   vehicleNumber: string;
   driver: string;
@@ -914,4 +914,278 @@ export interface DriverCollection extends AuditFields {
   createdAt: string;
   updatedAt?: string;
 }
+
+// --------------------------------------------------------------------------
+// PROMPT 3: QUARRY MACHINERY, JCB & MAINTENANCE MASTER TYPES
+// --------------------------------------------------------------------------
+
+export type MachineType =
+  | 'Cutting Machine'
+  | 'Adarth Machine'
+  | 'Rail'
+  | 'JCB'
+  | 'Other Quarry Equipment';
+
+export type MachineOwnerType =
+  | 'Quarry Owned'
+  | 'Rented'
+  | 'Contractor Owned'
+  | 'Leased';
+
+export type MachineStatus =
+  | 'Active'
+  | 'Maintenance'
+  | 'Breakdown'
+  | 'Inactive'
+  | 'Retired';
+
+export interface QuarryMachine extends AuditFields {
+  id: string;
+  machineId: string; // Permanent Machine ID, e.g. MCH-CM-01
+  machineName: string; // e.g. 'Cutting Machine 01'
+  machineType: MachineType;
+  ownerType: MachineOwnerType;
+  ownerName: string; // e.g. 'RZ Quarry', 'Ali', 'Mujeeb'
+  registrationNumber?: string; // Serial / Reg No
+  model?: string;
+  operator?: string;
+  assistantOperator?: string;
+  currentStatus: MachineStatus;
+  installationDate: string;
+  currentHourReading: number;
+  hourlyRate?: number; // e.g. ₹1,400 for JCB
+  dailyRentAmount?: number; // e.g. ₹2,000 for Mujeeb Rail, ₹0 for Ali
+  monthlyRentAmount?: number;
+  quarryId: string;
+  quarryName?: string;
+  notes?: string;
+  photoUrl?: string;
+  active: boolean;
+  // Machine Replacement History
+  replacedByMachineId?: string;
+  replacementDate?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface JcbUsageRecord extends AuditFields {
+  id: string;
+  date: string; // YYYY-MM-DD
+  jcbId: string; // Links to QuarryMachine
+  jcbName: string;
+  owner: string;
+  operator: string;
+  startHourReading: number;
+  endHourReading: number;
+  totalHours: number; // calculated: end - start (Validation: end >= start)
+  ratePerHour: number; // Default: ₹1,400/hour
+  totalAmount: number; // totalHours * ratePerHour
+  workDescription: string;
+  dieselResponsibility: 'Owner' | 'Quarry Reimbursed';
+  reimbursedDieselAmount?: number;
+  notes?: string;
+  attachmentUrl?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface MachineRentContract extends AuditFields {
+  id: string;
+  contractId: string; // e.g. MRC-2026-001
+  owner: string; // e.g. 'Mujeeb', 'Ali'
+  machines: string[]; // e.g. ['Cutting Machine 01', 'Cutting Machine 02', 'Rail 1']
+  startDate: string;
+  endDate?: string;
+  dailyRate: number; // e.g. ₹2,000 for Mujeeb, ₹0 for Ali
+  workingDayRule: boolean; // true = working days only
+  accruedRent: number;
+  paidRent: number;
+  outstandingBalance: number;
+  paymentStatus: 'PAID' | 'PARTIAL' | 'PENDING';
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface DieselEntry extends AuditFields {
+  id: string;
+  date: string; // YYYY-MM-DD
+  targetType: 'Quarry Machine' | 'Vehicle' | 'JCB';
+  machineId?: string;
+  machineName?: string;
+  vehicleNumber?: string;
+  supplier: string; // Shop / Pump vendor
+  supplierId?: string;
+  quantityLiters: number;
+  unit: 'L';
+  ratePerLiter: number;
+  amount: number;
+  paymentMethod: 'Cash' | 'Bank' | 'Credit' | 'UPI';
+  billNumber?: string;
+  billPhotoUrl?: string;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface OilEntry extends AuditFields {
+  id: string;
+  date: string; // YYYY-MM-DD
+  machineId: string;
+  machineName: string;
+  oilType: 'Engine Oil' | 'Hydraulic Oil' | 'Gear Oil' | 'Other Oil';
+  quantityLiters: number;
+  unit: 'L';
+  ratePerLiter: number;
+  amount: number;
+  supplier: string;
+  supplierId?: string;
+  billNumber?: string;
+  billPhotoUrl?: string;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface SparePartEntry extends AuditFields {
+  id: string;
+  date: string; // YYYY-MM-DD
+  machineId: string;
+  machineName: string;
+  partName: string;
+  partCategory:
+    | 'Blade'
+    | 'Bearing'
+    | 'Belt'
+    | 'Filter'
+    | 'Gear'
+    | 'Hydraulic Part'
+    | 'Cutting Part'
+    | 'Electrical Part'
+    | 'Other';
+  quantity: number;
+  unit: string; // pcs, sets, meters
+  rate: number;
+  amount: number;
+  supplier: string;
+  supplierId?: string;
+  billNumber?: string;
+  billPhotoUrl?: string;
+  installationDate?: string;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export type BladeStatus = 'NEW' | 'INSTALLED' | 'ACTIVE' | 'REMOVED' | 'FAILED' | 'REPLACED';
+
+export interface BladeRecord extends AuditFields {
+  id: string;
+  bladeId: string; // e.g. BLD-2026-001
+  bladeType: 'Cutting Blade' | 'Adarth Blade';
+  machineId: string;
+  machineName: string;
+  purchaseDate: string;
+  purchasePrice: number; // Cutting Blade ₹14,000, Adarth Blade ₹15,000 (configurable)
+  installedDate?: string;
+  removedDate?: string;
+  runningHours: number;
+  productionOutputStones?: number;
+  removalReason?: string;
+  status: BladeStatus;
+  supplier: string;
+  billNumber?: string;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface MachineMaintenanceRecord extends AuditFields {
+  id: string;
+  maintenanceId: string; // e.g. MNT-2026-001
+  date: string; // YYYY-MM-DD
+  machineId: string;
+  machineName: string;
+  maintenanceType: 'Preventive' | 'Breakdown' | 'Repair' | 'Service' | 'Replacement' | 'Other';
+  description: string;
+  technicianOrShop: string;
+  labourCost: number;
+  partsCost: number;
+  totalCost: number; // labourCost + partsCost
+  billNumber?: string;
+  billPhotoUrl?: string;
+  nextServiceDate?: string;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface VendorShop extends AuditFields {
+  id: string;
+  vendorId: string; // e.g. VND-001
+  vendorName: string;
+  phone: string;
+  address: string;
+  category:
+    | 'Machine repair shop'
+    | 'Spare parts shop'
+    | 'Diesel shop'
+    | 'Oil shop'
+    | 'Food purchase shop'
+    | 'General supplier';
+  outstandingBalance: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface FoodPurchaseBill extends AuditFields {
+  id: string;
+  date: string; // YYYY-MM-DD
+  shopOrVendor: string;
+  vendorId?: string;
+  items: string; // Rice, provisions, cooking gas, tea
+  quantity: string;
+  amount: number;
+  paymentMethod: string;
+  billNumber?: string;
+  billPhotoUrl?: string;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface ToolsRoomRentRecord extends AuditFields {
+  id: string;
+  month: string; // e.g. 'October 2026'
+  monthlyRate: number; // Default: ₹2,000/month
+  rentDue: number;
+  paid: number;
+  paymentDate?: string;
+  paymentMethod?: string;
+  outstanding: number;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
+export interface DailyMachineWorkLog extends AuditFields {
+  id: string;
+  date: string; // YYYY-MM-DD
+  machineId: string;
+  machineName: string;
+  operator: string;
+  startTime: string;
+  endTime: string;
+  machineHours: number;
+  startReading?: number;
+  endReading?: number;
+  workDescription: string;
+  productionReference?: string;
+  fuelReference?: string;
+  maintenanceReference?: string;
+  notes?: string;
+  quarryId?: string;
+  createdAt: string;
+}
+
 

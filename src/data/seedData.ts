@@ -27,6 +27,18 @@ import {
   BrandingConfig,
   BillingConfig,
   DriverCollection,
+  QuarryMachine,
+  JcbUsageRecord,
+  MachineRentContract,
+  DieselEntry,
+  OilEntry,
+  SparePartEntry,
+  BladeRecord,
+  MachineMaintenanceRecord,
+  VendorShop,
+  FoodPurchaseBill,
+  ToolsRoomRentRecord,
+  DailyMachineWorkLog,
 } from '../types/quarry';
 import { getTodayDateString, getPreviousDateString, getNextDateString } from '../utils/formatters';
 
@@ -2896,3 +2908,668 @@ export const INITIAL_ROUND_LOGS: QuarryRoundLog[] = [
     remarks: 'Delivered to Greenfield site. Returned and queued at 01:45 PM.',
   },
 ];
+
+// --------------------------------------------------------------------------
+// PROMPT 3: QUARRY MACHINERY MASTER SEED DATA
+// --------------------------------------------------------------------------
+
+export const INITIAL_MACHINES: QuarryMachine[] = [
+  {
+    id: 'mch-001',
+    machineId: 'MCH-CM-01',
+    machineName: 'Cutting Machine 01',
+    machineType: 'Cutting Machine',
+    ownerType: 'Quarry Owned',
+    ownerName: 'RZ Quarry',
+    registrationNumber: 'RZ-CUT-2024-01',
+    model: 'Double-Blade Track Cutter 45HP',
+    operator: 'Mujeeb Rahman',
+    assistantOperator: 'Hamza V',
+    currentStatus: 'Active',
+    installationDate: '2025-11-10',
+    currentHourReading: 1420.5,
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    notes: 'Primary heavy diamond-blade track cutter. Fully owned by RZ Quarry.',
+    active: true,
+    createdAt: '2025-11-10T08:00:00Z',
+  },
+  {
+    id: 'mch-002',
+    machineId: 'MCH-CM-02',
+    machineName: 'Cutting Machine 02',
+    machineType: 'Cutting Machine',
+    ownerType: 'Quarry Owned',
+    ownerName: 'RZ Quarry',
+    registrationNumber: 'RZ-CUT-2024-02',
+    model: 'Double-Blade Track Cutter 40HP',
+    operator: 'Razak',
+    assistantOperator: 'Musthafa',
+    currentStatus: 'Active',
+    installationDate: '2025-12-05',
+    currentHourReading: 1180.0,
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    notes: 'Secondary diamond-blade track cutter. Fully owned by RZ Quarry.',
+    active: true,
+    createdAt: '2025-12-05T08:00:00Z',
+  },
+  {
+    id: 'mch-003',
+    machineId: 'MCH-RL-01',
+    machineName: 'Rail 1',
+    machineType: 'Rail',
+    ownerType: 'Rented',
+    ownerName: 'Ali',
+    registrationNumber: 'ALI-RL-99',
+    model: 'Heavy Duty Quarry Track Rail System',
+    operator: 'Shoukath',
+    currentStatus: 'Active',
+    installationDate: '2026-01-15',
+    currentHourReading: 840.0,
+    dailyRentAmount: 0, // Ali's Rail has NO RENT (₹0)
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    notes: "Ali's Rail — Strictly NO RENT agreement (₹0/day).",
+    active: true,
+    createdAt: '2026-01-15T08:00:00Z',
+  },
+  {
+    id: 'mch-004',
+    machineId: 'MCH-AD-01',
+    machineName: 'Adarth Rail',
+    machineType: 'Adarth Machine',
+    ownerType: 'Rented',
+    ownerName: 'Mujeeb',
+    registrationNumber: 'MJB-ADR-2025',
+    model: 'Adarth Laterite Splitting Rail Unit',
+    operator: 'Kunjali',
+    assistantOperator: 'Shareef',
+    currentStatus: 'Active',
+    installationDate: '2026-02-01',
+    currentHourReading: 650.0,
+    dailyRentAmount: 2000, // Mujeeb Rent = ₹2,000/day on working days
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    notes: 'Mujeeb machine rental arrangement: ₹2,000 per working day for 2 cutting machines + 1 rail.',
+    active: true,
+    createdAt: '2026-02-01T08:00:00Z',
+  },
+  {
+    id: 'mch-005',
+    machineId: 'MCH-JCB-01',
+    machineName: 'JCB 01 — Volvo 210',
+    machineType: 'JCB',
+    ownerType: 'Contractor Owned',
+    ownerName: 'Safeer Heavy Equipments',
+    registrationNumber: 'KL-53-E-8812',
+    model: 'Volvo EC210D Prime Excavator',
+    operator: 'Saneesh (JCB Operator)',
+    currentStatus: 'Active',
+    installationDate: '2026-01-10',
+    currentHourReading: 1256.5,
+    hourlyRate: 1400, // Standard JCB rate = ₹1,400/hour
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    notes: 'JCB owner provides diesel. Rate: ₹1,400/hr. Start/End meter readings recorded daily.',
+    active: true,
+    createdAt: '2026-01-10T08:00:00Z',
+  },
+  {
+    id: 'mch-006',
+    machineId: 'MCH-JCB-02',
+    machineName: 'JCB 02 — CAT 320D',
+    machineType: 'JCB',
+    ownerType: 'Contractor Owned',
+    ownerName: 'Malabar Earthmovers',
+    registrationNumber: 'KL-10-AZ-4421',
+    model: 'Caterpillar 320D Excavator',
+    operator: 'Subair',
+    currentStatus: 'Active',
+    installationDate: '2026-03-01',
+    currentHourReading: 890.0,
+    hourlyRate: 1400,
+    quarryId: 'quarry-001',
+    quarryName: 'RZ Quarry 001',
+    notes: 'Standby / Overburden clearing JCB hired as needed at ₹1,400/hr.',
+    active: true,
+    createdAt: '2026-03-01T08:00:00Z',
+  },
+];
+
+// --------------------------------------------------------------------------
+// JCB DAILY HOUR READING & USAGE RECORDS (Rate = ₹1,400/hr)
+// --------------------------------------------------------------------------
+
+export const INITIAL_JCB_RECORDS: JcbUsageRecord[] = [
+  {
+    id: 'jcb-rec-001',
+    date: getTodayDateString(),
+    jcbId: 'MCH-JCB-01',
+    jcbName: 'JCB 01 — Volvo 210',
+    owner: 'Safeer Heavy Equipments',
+    operator: 'Saneesh (JCB Operator)',
+    startHourReading: 1250.5,
+    endHourReading: 1256.5,
+    totalHours: 6.0, // 1256.5 - 1250.5
+    ratePerHour: 1400, // ₹1,400/hr
+    totalAmount: 8400, // 6 * 1400
+    workDescription: 'Bench overburden clearance and pit bench floor grading at Section A',
+    dieselResponsibility: 'Owner', // JCB owner provides diesel
+    notes: 'Meter reading verified by quarry supervisor. Fuel supplied by JCB owner.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T17:30:00Z`,
+  },
+  {
+    id: 'jcb-rec-002',
+    date: getPreviousDateString(getTodayDateString()),
+    jcbId: 'MCH-JCB-01',
+    jcbName: 'JCB 01 — Volvo 210',
+    owner: 'Safeer Heavy Equipments',
+    operator: 'Saneesh (JCB Operator)',
+    startHourReading: 1245.0,
+    endHourReading: 1250.5,
+    totalHours: 5.5,
+    ratePerHour: 1400,
+    totalAmount: 7700,
+    workDescription: 'Pit entry ramp rock cutting and North bench clearing',
+    dieselResponsibility: 'Owner',
+    notes: 'Standard working session. Verified meter reading.',
+    quarryId: 'quarry-001',
+    createdAt: `${getPreviousDateString(getTodayDateString())}T17:45:00Z`,
+  },
+  {
+    id: 'jcb-rec-003',
+    date: getPreviousDateString(getPreviousDateString(getTodayDateString())),
+    jcbId: 'MCH-JCB-02',
+    jcbName: 'JCB 02 — CAT 320D',
+    owner: 'Malabar Earthmovers',
+    operator: 'Subair',
+    startHourReading: 885.0,
+    endHourReading: 890.0,
+    totalHours: 5.0,
+    ratePerHour: 1400,
+    totalAmount: 7000,
+    workDescription: 'East face topsoil overburden removal',
+    dieselResponsibility: 'Quarry Reimbursed',
+    reimbursedDieselAmount: 3680, // Explicit reimbursement transaction
+    notes: 'Quarry filled 40L diesel under explicit reimbursement agreement.',
+    quarryId: 'quarry-001',
+    createdAt: `${getPreviousDateString(getPreviousDateString(getTodayDateString()))}T16:00:00Z`,
+  },
+];
+
+// --------------------------------------------------------------------------
+// MACHINE RENT CONTRACTS (Mujeeb ₹2,000/day, Ali ₹0/day)
+// --------------------------------------------------------------------------
+
+export const INITIAL_RENT_CONTRACTS: MachineRentContract[] = [
+  {
+    id: 'mrc-001',
+    contractId: 'MRC-2026-001',
+    owner: 'Mujeeb',
+    machines: ['Cutting Machine 01', 'Cutting Machine 02', 'Adarth Rail'],
+    startDate: '2026-01-01',
+    dailyRate: 2000,
+    workingDayRule: true,
+    accruedRent: 52000,
+    paidRent: 40000,
+    outstandingBalance: 12000,
+    paymentStatus: 'PARTIAL',
+    notes: 'Mujeeb working equipment arrangement: 2 cutting machines + 1 rail. ₹2,000 per working day.',
+    quarryId: 'quarry-001',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+  {
+    id: 'mrc-002',
+    contractId: 'MRC-2026-002',
+    owner: 'Ali',
+    machines: ['Rail 1'],
+    startDate: '2026-01-01',
+    dailyRate: 0,
+    workingDayRule: true,
+    accruedRent: 0,
+    paidRent: 0,
+    outstandingBalance: 0,
+    paymentStatus: 'PAID',
+    notes: "Ali's Rail — Strictly NO RENT agreement. No payable generated.",
+    quarryId: 'quarry-001',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+];
+
+// --------------------------------------------------------------------------
+// SHOP / VENDOR MASTER
+// --------------------------------------------------------------------------
+
+export const INITIAL_VENDORS: VendorShop[] = [
+  {
+    id: 'vnd-001',
+    vendorId: 'VND-001',
+    vendorName: 'Hindustan Petroleum Melattur Bunk',
+    phone: '+91 94471 22334',
+    address: 'Melattur Junction, Malappuram',
+    category: 'Diesel shop',
+    outstandingBalance: 14200,
+    notes: 'Primary diesel supplier for quarry cutting machinery and vehicles.',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+  {
+    id: 'vnd-002',
+    vendorId: 'VND-002',
+    vendorName: 'Castrol & Shell Oil Depot Perinthalmanna',
+    phone: '+91 98472 55667',
+    address: 'Bypass Road, Perinthalmanna',
+    category: 'Oil shop',
+    outstandingBalance: 4200,
+    notes: 'Engine oil, hydraulic oil 68, and gear oil 90 for cutting machines.',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+  {
+    id: 'vnd-003',
+    vendorId: 'VND-003',
+    vendorName: 'Perinthalmanna Spare Parts & Engineering',
+    phone: '+91 98950 33445',
+    address: 'Industrial Estate, Perinthalmanna',
+    category: 'Spare parts shop',
+    outstandingBalance: 8600,
+    notes: 'Diamond cutting blades, segments, bearings, V-belts, and gears.',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+  {
+    id: 'vnd-004',
+    vendorId: 'VND-004',
+    vendorName: 'Ali & Sons Mechanical Works',
+    phone: '+91 94460 77889',
+    address: 'Near Karakkaparambu Bridge, Melattur',
+    category: 'Machine repair shop',
+    outstandingBalance: 3500,
+    notes: 'Heavy machinery welding, lathe works, and track maintenance.',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+  {
+    id: 'vnd-005',
+    vendorId: 'VND-005',
+    vendorName: 'Karakkaparambu Provision Stores',
+    phone: '+91 98460 11223',
+    address: 'Karakkaparambu, Melattur Road',
+    category: 'Food purchase shop',
+    outstandingBalance: 1650,
+    notes: 'Food provisions, cooking supplies, and drinking water for quarry workers.',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+  {
+    id: 'vnd-006',
+    vendorId: 'VND-006',
+    vendorName: 'General Quarry Tools & Industrial Hardware',
+    phone: '+91 98470 99881',
+    address: 'Town Square, Manjeri',
+    category: 'General supplier',
+    outstandingBalance: 2400,
+    notes: 'Splitter wedges, sledge hammers, safety helmets, electrical cabling.',
+    createdAt: '2026-01-01T08:00:00Z',
+  },
+];
+
+// --------------------------------------------------------------------------
+// QUARRY MACHINERY DIESEL RECORDS (Separate from vehicle diesel!)
+// --------------------------------------------------------------------------
+
+export const INITIAL_DIESEL_ENTRIES: DieselEntry[] = [
+  {
+    id: 'dsl-001',
+    date: getTodayDateString(),
+    targetType: 'Quarry Machine',
+    machineId: 'MCH-CM-01',
+    machineName: 'Cutting Machine 01',
+    supplier: 'Hindustan Petroleum Melattur Bunk',
+    supplierId: 'vnd-001',
+    quantityLiters: 55,
+    unit: 'L',
+    ratePerLiter: 92,
+    amount: 5060, // 55 * 92
+    paymentMethod: 'Credit',
+    billNumber: 'HP-DSL-9841',
+    notes: 'Daily cutting run fuel for double-blade cutter 01.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T08:30:00Z`,
+  },
+  {
+    id: 'dsl-002',
+    date: getTodayDateString(),
+    targetType: 'Quarry Machine',
+    machineId: 'MCH-CM-02',
+    machineName: 'Cutting Machine 02',
+    supplier: 'Hindustan Petroleum Melattur Bunk',
+    supplierId: 'vnd-001',
+    quantityLiters: 50,
+    unit: 'L',
+    ratePerLiter: 92,
+    amount: 4600, // 50 * 92
+    paymentMethod: 'Credit',
+    billNumber: 'HP-DSL-9842',
+    notes: 'Daily cutting run fuel for cutter 02.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T09:00:00Z`,
+  },
+  {
+    id: 'dsl-003',
+    date: getPreviousDateString(getTodayDateString()),
+    targetType: 'Quarry Machine',
+    machineId: 'MCH-AD-01',
+    machineName: 'Adarth Rail',
+    supplier: 'Hindustan Petroleum Melattur Bunk',
+    supplierId: 'vnd-001',
+    quantityLiters: 40,
+    unit: 'L',
+    ratePerLiter: 92,
+    amount: 3680,
+    paymentMethod: 'Cash',
+    billNumber: 'HP-DSL-9801',
+    notes: 'Adarth machine diesel for splitting rail unit.',
+    quarryId: 'quarry-001',
+    createdAt: `${getPreviousDateString(getTodayDateString())}T08:45:00Z`,
+  },
+];
+
+// --------------------------------------------------------------------------
+// MACHINE-SPECIFIC OIL RECORDS
+// --------------------------------------------------------------------------
+
+export const INITIAL_OIL_ENTRIES: OilEntry[] = [
+  {
+    id: 'oil-001',
+    date: getPreviousDateString(getTodayDateString()),
+    machineId: 'MCH-CM-01',
+    machineName: 'Cutting Machine 01',
+    oilType: 'Engine Oil',
+    quantityLiters: 15,
+    unit: 'L',
+    ratePerLiter: 280,
+    amount: 4200,
+    supplier: 'Castrol & Shell Oil Depot Perinthalmanna',
+    supplierId: 'vnd-002',
+    billNumber: 'CS-OIL-1044',
+    notes: 'Engine 15W40 oil change at 1,400 hours.',
+    quarryId: 'quarry-001',
+    createdAt: `${getPreviousDateString(getTodayDateString())}T11:00:00Z`,
+  },
+  {
+    id: 'oil-002',
+    date: getTodayDateString(),
+    machineId: 'MCH-AD-01',
+    machineName: 'Adarth Rail',
+    oilType: 'Hydraulic Oil',
+    quantityLiters: 20,
+    unit: 'L',
+    ratePerLiter: 240,
+    amount: 4800,
+    supplier: 'Castrol & Shell Oil Depot Perinthalmanna',
+    supplierId: 'vnd-002',
+    billNumber: 'CS-OIL-1082',
+    notes: 'Hydraulic oil 68 top-up for rail clamping cylinders.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T10:15:00Z`,
+  },
+];
+
+// --------------------------------------------------------------------------
+// SPARE PARTS MANAGEMENT
+// --------------------------------------------------------------------------
+
+export const INITIAL_SPARE_ENTRIES: SparePartEntry[] = [
+  {
+    id: 'spr-001',
+    date: getTodayDateString(),
+    machineId: 'MCH-CM-01',
+    machineName: 'Cutting Machine 01',
+    partName: 'Diamond Cutting Segments Kit',
+    partCategory: 'Cutting Part',
+    quantity: 2,
+    unit: 'sets',
+    rate: 3200,
+    amount: 6400,
+    supplier: 'Perinthalmanna Spare Parts & Engineering',
+    supplierId: 'vnd-003',
+    billNumber: 'PSP-7721',
+    installationDate: getTodayDateString(),
+    notes: 'Replacement segment blocks for outer cutter disc.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T11:30:00Z`,
+  },
+  {
+    id: 'spr-002',
+    date: getPreviousDateString(getTodayDateString()),
+    machineId: 'MCH-CM-02',
+    machineName: 'Cutting Machine 02',
+    partName: 'Heavy-Duty V-Belt B-72',
+    partCategory: 'Belt',
+    quantity: 3,
+    unit: 'pcs',
+    rate: 650,
+    amount: 1950,
+    supplier: 'Perinthalmanna Spare Parts & Engineering',
+    supplierId: 'vnd-003',
+    billNumber: 'PSP-7690',
+    installationDate: getPreviousDateString(getTodayDateString()),
+    notes: 'Drive motor belt replacement.',
+    quarryId: 'quarry-001',
+    createdAt: `${getPreviousDateString(getTodayDateString())}T14:00:00Z`,
+  },
+];
+
+// --------------------------------------------------------------------------
+// BLADE MANAGEMENT (Cutting Blade ₹14,000, Adarth Blade ₹15,000 reference)
+// --------------------------------------------------------------------------
+
+export const INITIAL_BLADES: BladeRecord[] = [
+  {
+    id: 'bld-001',
+    bladeId: 'BLD-2026-001',
+    bladeType: 'Cutting Blade',
+    machineId: 'MCH-CM-01',
+    machineName: 'Cutting Machine 01',
+    purchaseDate: '2026-01-10',
+    purchasePrice: 14000, // Reference rate: ₹14,000
+    installedDate: '2026-01-12',
+    runningHours: 320.5,
+    productionOutputStones: 14200,
+    status: 'ACTIVE',
+    supplier: 'Perinthalmanna Spare Parts & Engineering',
+    billNumber: 'BLD-INV-441',
+    notes: 'Double-blade track disc A. Excellent cutting edge sharpness.',
+    quarryId: 'quarry-001',
+    createdAt: '2026-01-10T10:00:00Z',
+  },
+  {
+    id: 'bld-002',
+    bladeId: 'BLD-2026-002',
+    bladeType: 'Cutting Blade',
+    machineId: 'MCH-CM-02',
+    machineName: 'Cutting Machine 02',
+    purchaseDate: '2026-02-01',
+    purchasePrice: 14000,
+    installedDate: '2026-02-03',
+    runningHours: 260.0,
+    productionOutputStones: 11800,
+    status: 'ACTIVE',
+    supplier: 'Perinthalmanna Spare Parts & Engineering',
+    billNumber: 'BLD-INV-512',
+    notes: 'Secondary cutter disc. Normal wear profile.',
+    quarryId: 'quarry-001',
+    createdAt: '2026-02-01T10:00:00Z',
+  },
+  {
+    id: 'bld-003',
+    bladeId: 'BLD-2026-003',
+    bladeType: 'Adarth Blade',
+    machineId: 'MCH-AD-01',
+    machineName: 'Adarth Rail',
+    purchaseDate: '2026-02-15',
+    purchasePrice: 15000, // Reference rate: ₹15,000
+    installedDate: '2026-02-16',
+    runningHours: 190.0,
+    productionOutputStones: 8400,
+    status: 'ACTIVE',
+    supplier: 'Perinthalmanna Spare Parts & Engineering',
+    billNumber: 'BLD-INV-589',
+    notes: 'Heavy Adarth vertical splitting blade.',
+    quarryId: 'quarry-001',
+    createdAt: '2026-02-15T10:00:00Z',
+  },
+];
+
+// --------------------------------------------------------------------------
+// MACHINE MAINTENANCE RECORDS
+// --------------------------------------------------------------------------
+
+export const INITIAL_MAINTENANCE_RECORDS: MachineMaintenanceRecord[] = [
+  {
+    id: 'mnt-001',
+    maintenanceId: 'MNT-2026-001',
+    date: getPreviousDateString(getTodayDateString()),
+    machineId: 'MCH-CM-01',
+    machineName: 'Cutting Machine 01',
+    maintenanceType: 'Preventive',
+    description: 'Track alignment, drive shaft grease pack and diamond blade tension check',
+    technicianOrShop: 'Ali & Sons Mechanical Works',
+    labourCost: 1500,
+    partsCost: 2200,
+    totalCost: 3700,
+    billNumber: 'AL-MNT-9102',
+    nextServiceDate: getNextDateString(getTodayDateString()),
+    notes: 'Monthly scheduled preventive checkup complete. Machine operational.',
+    quarryId: 'quarry-001',
+    createdAt: `${getPreviousDateString(getTodayDateString())}T16:30:00Z`,
+  },
+  {
+    id: 'mnt-002',
+    maintenanceId: 'MNT-2026-002',
+    date: getTodayDateString(),
+    machineId: 'MCH-AD-01',
+    machineName: 'Adarth Rail',
+    maintenanceType: 'Repair',
+    description: 'Rail guide roller bearing replacement and hydraulic pressure valve adjustment',
+    technicianOrShop: 'Perinthalmanna Spare Parts & Engineering',
+    labourCost: 2000,
+    partsCost: 3500,
+    totalCost: 5500,
+    billNumber: 'PSP-REP-4402',
+    notes: 'Resolved slight rail vibration during stone split. Passed trial cut.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T13:45:00Z`,
+  },
+];
+
+// --------------------------------------------------------------------------
+// FOOD PURCHASE BILLS (Worker Welfare — Never mixed with machine expenses!)
+// --------------------------------------------------------------------------
+
+export const INITIAL_FOOD_PURCHASES: FoodPurchaseBill[] = [
+  {
+    id: 'fpb-001',
+    date: getTodayDateString(),
+    shopOrVendor: 'Karakkaparambu Provision Stores',
+    vendorId: 'vnd-005',
+    items: 'Rice 50kg bag, cooking oil, dal, spices and mess kitchen provisions',
+    quantity: '1 batch',
+    amount: 4800,
+    paymentMethod: 'Cash',
+    billNumber: 'KPS-FD-3321',
+    notes: 'Quarry staff and operator mess weekly food supplies.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T10:00:00Z`,
+  },
+  {
+    id: 'fpb-002',
+    date: getPreviousDateString(getTodayDateString()),
+    shopOrVendor: 'Karakkaparambu Provision Stores',
+    vendorId: 'vnd-005',
+    items: 'Tea powder, sugar, biscuits and 20L mineral water cans for pit workers',
+    quantity: 'Daily batch',
+    amount: 1650,
+    paymentMethod: 'Cash',
+    billNumber: 'KPS-FD-3298',
+    notes: 'Daily refresh rations for cutting machine workers and helpers.',
+    quarryId: 'quarry-001',
+    createdAt: `${getPreviousDateString(getTodayDateString())}T11:00:00Z`,
+  },
+];
+
+// --------------------------------------------------------------------------
+// TOOLS ROOM RENT (Configurable rate, default ₹2,000/month)
+// --------------------------------------------------------------------------
+
+export const INITIAL_TOOLS_RENT: ToolsRoomRentRecord[] = [
+  {
+    id: 'trr-001',
+    month: 'October 2026',
+    monthlyRate: 2000, // ₹2,000/month
+    rentDue: 2000,
+    paid: 2000,
+    paymentDate: getTodayDateString(),
+    paymentMethod: 'Cash',
+    outstanding: 0,
+    notes: 'Monthly storage tools room rent settled with property shed owner.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T09:30:00Z`,
+  },
+  {
+    id: 'trr-002',
+    month: 'September 2026',
+    monthlyRate: 2000,
+    rentDue: 2000,
+    paid: 2000,
+    paymentDate: '2026-09-05',
+    paymentMethod: 'Bank Transfer',
+    outstanding: 0,
+    notes: 'September rent cleared via UPI.',
+    quarryId: 'quarry-001',
+    createdAt: '2026-09-05T10:00:00Z',
+  },
+];
+
+// --------------------------------------------------------------------------
+// DAILY MACHINE WORK LOGS
+// --------------------------------------------------------------------------
+
+export const INITIAL_MACHINE_WORK_LOGS: DailyMachineWorkLog[] = [
+  {
+    id: 'mwl-001',
+    date: getTodayDateString(),
+    machineId: 'MCH-CM-01',
+    machineName: 'Cutting Machine 01',
+    operator: 'Mujeeb Rahman',
+    startTime: '07:30 AM',
+    endTime: '12:00 PM',
+    machineHours: 4.5,
+    startReading: 1416.0,
+    endReading: 1420.5,
+    workDescription: 'Continuous bench cutting at Section A top-rock face',
+    productionReference: 'PRD-2026-001',
+    fuelReference: 'HP-DSL-9841',
+    maintenanceReference: 'MNT-2026-001',
+    notes: 'Optimal blade speed. 780 stones cut.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T12:15:00Z`,
+  },
+  {
+    id: 'mwl-002',
+    date: getTodayDateString(),
+    machineId: 'MCH-CM-02',
+    machineName: 'Cutting Machine 02',
+    operator: 'Razak',
+    startTime: '08:30 AM',
+    endTime: '01:00 PM',
+    machineHours: 4.5,
+    startReading: 1175.5,
+    endReading: 1180.0,
+    workDescription: 'Section B bench cutting along cleared slope',
+    productionReference: 'PRD-2026-002',
+    fuelReference: 'HP-DSL-9842',
+    notes: 'Weaker rock layer cutting. Blade speed adjusted.',
+    quarryId: 'quarry-001',
+    createdAt: `${getTodayDateString()}T13:30:00Z`,
+  },
+];
+

@@ -123,6 +123,7 @@ export const QuarryManagementView: React.FC = () => {
     }
 
     addQuarrySection(selectedQuarry.id, {
+      id: `sec-${Date.now()}`,
       sectionCode: code,
       name: newSectionName,
       description: newSectionDescription,
@@ -134,6 +135,7 @@ export const QuarryManagementView: React.FC = () => {
   const handleCreateQuarry = (e: React.FormEvent) => {
     e.preventDefault();
     addQuarry({
+      id: `quarry-${Date.now()}`,
       quarryCode: newQuarryCode,
       quarryName: newQuarryName,
       businessName: 'RZ Mining Ventures LLP',
