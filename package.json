@@ -29,7 +29,6 @@
     "pg": "^8.11.0",
     "drizzle-orm": "^1.0.0",
     "drizzle-kit": "^1.0.0",
-    "drizzle-orm/node-postgres": "^1.0.0",
     "firebase-admin": "^11.10.0",
     "zod": "^3.22.2",
     "helmet": "^7.0.0",
