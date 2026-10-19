@@ -29,6 +29,18 @@ import {
 
 dotenv.config();
 
+// PostgreSQL + Drizzle ORM Database Foundation
+import { db as pgDb, pool, isDatabaseConfigured } from './src/db/index.ts';
+import {
+  createLoadSchema,
+  createOrderSchema,
+  createGatePassSchema,
+  createPaymentSchema,
+  createExpenseSchema,
+  createIncomeSchema,
+  createProductionSchema,
+} from './src/db/validators.ts';
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -289,6 +301,38 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// Production PostgreSQL + Drizzle Database Status Endpoint
+app.get('/api/db/status', async (req: Request, res: Response) => {
+  const configured = isDatabaseConfigured();
+  if (!configured) {
+    return res.json({
+      engine: 'PostgreSQL + Drizzle ORM',
+      configured: false,
+      status: 'FALLBACK_FILE_DB',
+      message: 'DATABASE_URL is not set; running on persistent fallback data file.',
+    });
+  }
+  try {
+    const result = await pool.query(
+      "SELECT NOW() as current_time, count(*) as tables_count FROM information_schema.tables WHERE table_schema = 'public'"
+    );
+    res.json({
+      engine: 'PostgreSQL + Drizzle ORM',
+      configured: true,
+      status: 'CONNECTED',
+      currentTime: result.rows[0]?.current_time,
+      tablesCount: Number(result.rows[0]?.tables_count || 0),
+    });
+  } catch (err: any) {
+    res.json({
+      engine: 'PostgreSQL + Drizzle ORM',
+      configured: true,
+      status: 'DISCONNECTED',
+      error: err.message,
+    });
+  }
+});
+
 // Authentication endpoint: Direct Access Mode (No Login required)
 app.post('/api/auth/verify', (req: Request, res: Response) => {
   const { email, name } = req.body || {};
@@ -318,6 +362,11 @@ app.get('/api/state', (req: Request, res: Response) => {
 
 // Load Order
 app.post('/api/loads', (req: Request, res: Response) => {
+  const validation = createLoadSchema.safeParse(req.body);
+  if (!validation.success) {
+    console.warn('[Validation Warning /api/loads]:', validation.error.format());
+  }
+
   const newLoad = req.body;
   if (!newLoad.id) {
     newLoad.id = `load-${Date.now()}`;
@@ -839,22 +888,36 @@ app.delete('/api/driver-collections/:id', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// Database Full Backup / Reset
+// Database Full Backup / Reset with Production Safety
 app.post('/api/reset', (req: Request, res: Response) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const confirmHeader = req.headers['x-admin-confirm'];
+  if (isProduction && confirmHeader !== 'CONFIRM_RESET') {
+    return res.status(403).json({
+      error: 'Production safety lock active. Explicit confirmation required for database reset.',
+    });
+  }
   db = getInitialDatabase();
   saveDatabase(db);
-  res.json({ success: true });
+  res.json({ success: true, message: 'Database reset to initial operational state.' });
 });
 
 app.post('/api/import', (req: Request, res: Response) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const confirmHeader = req.headers['x-admin-confirm'];
+  if (isProduction && confirmHeader !== 'CONFIRM_IMPORT') {
+    return res.status(403).json({
+      error: 'Production safety lock active. Explicit confirmation required for database restore.',
+    });
+  }
   try {
     const imported = req.body;
     if (imported.loads && imported.vehicles) {
       db = imported;
       saveDatabase(db);
-      res.json({ success: true });
+      res.json({ success: true, message: 'Database imported successfully.' });
     } else {
-      res.status(400).json({ error: 'Invalid backup structure' });
+      res.status(400).json({ error: 'Invalid backup structure. Required keys missing.' });
     }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
