@@ -119,3 +119,11 @@ export const audit_logs = pgTable('audit_logs', {
   reason: text('reason'),
   created_at: timestamp('created_at').default(sql`now()`).notNull(),
 });
+
+// Server-managed mapping between an authenticated user and an authorized quarry.
+export const user_quarry_permissions = pgTable('user_quarry_permissions', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  user_id: varchar('user_id', { length: 128 }).notNull().references(() => users.id),
+  quarry_id: varchar('quarry_id', { length: 64 }).notNull().references(() => quarries.id),
+  created_at: timestamp('created_at').default(sql`now()`).notNull(),
+});
