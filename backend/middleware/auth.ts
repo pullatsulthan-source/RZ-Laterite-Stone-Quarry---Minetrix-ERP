@@ -30,14 +30,14 @@ async function upsertUser(uid: string, email?: string, name?: string, photo?: st
     role: process.env.BOOTSTRAP_OWNER_UID === uid ? 'OWNER' : 'VIEWER',
     updated_at: new Date(),
   };
-  const updates: Record<string, unknown> = {
+  // Explicit, deployment-controlled bootstrap only; never accept a role from the client.
+  const updates = {
     email: values.email,
     display_name: values.display_name,
     photo_url: values.photo_url,
     updated_at: values.updated_at,
+    ...(process.env.BOOTSTRAP_OWNER_UID === uid ? { role: 'OWNER' } : {}),
   };
-  // Explicit, deployment-controlled bootstrap only; never accept a role from the client.
-  if (process.env.BOOTSTRAP_OWNER_UID === uid) updates.role = 'OWNER';
 
   await db.insert(users).values(values).onConflictDoUpdate({
     target: users.id,
