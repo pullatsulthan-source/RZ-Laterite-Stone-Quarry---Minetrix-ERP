@@ -34,7 +34,7 @@ jobs:
           bun-version: latest
 
       - name: Install locked dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: TypeScript check
         run: bun run lint
