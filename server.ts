@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { requireAuth, requireRole } from './backend/middleware/auth';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -289,29 +290,43 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// Authentication endpoint: Direct Access Mode (No Login required)
-app.post('/api/auth/verify', (req: Request, res: Response) => {
-  const { email, name } = req.body || {};
-  const isAflah = email && email.toLowerCase().includes('aflah');
-  const shortName = isAflah ? 'Aflah' : 'Nafid';
-  res.json({
-    authorized: true,
-    user: {
-      id: isAflah ? 'op_aflah_rz' : 'op_nafid_rz',
-      email: isAflah ? 'aflah@racezoneventures.com' : 'nafidkhan@racezoneventures.com',
-      name: name || (isAflah ? 'Aflah RZ' : 'Nafid Khan'),
-      shortName,
-      picture: isAflah
-        ? 'https://ui-avatars.com/api/?name=Aflah+RZ&background=d4af37&color=090a0d&bold=true'
-        : 'https://ui-avatars.com/api/?name=Nafid+Khan&background=d4af37&color=090a0d&bold=true',
-      verifiedAt: new Date().toISOString(),
-    },
-  });
-});
+// Fail closed: all ERP APIs require a verified Firebase ID token.
+// Health remains public so deployment health checks can run without credentials.
+app.use('/api', requireAuth);
 
-// Full state endpoint for multi-device synchronization
+// State is protected and scoped to the authenticated user's server-side quarry memberships.
 app.get('/api/state', (req: Request, res: Response) => {
-  res.json(db);
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  if (user.role === 'OWNER' || user.role === 'ADMIN') return res.json(db);
+
+  const allowed = new Set(user.quarryIds);
+  const scopedArrays = new Set([
+    'vehicles', 'drivers', 'customers', 'staff', 'attendance', 'advances',
+    'payrolls', 'loads', 'gatePasses', 'production', 'stockAdjustments',
+    'income', 'expenses', 'payments', 'statements', 'rotations',
+    'vehicleTransactions', 'orders', 'driverCollections',
+  ]);
+  const safeState: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(db)) {
+    if (key === 'quarries') {
+      safeState[key] = (db.quarries || []).filter((q: any) => allowed.has(String(q.id)));
+    } else if (scopedArrays.has(key) && Array.isArray(value)) {
+      // Legacy rows without an explicit quarry ID are excluded for non-admin users.
+      safeState[key] = value.filter((row: any) => {
+        const quarryId = row?.quarryId ?? row?.quarry_id;
+        return quarryId != null && allowed.has(String(quarryId));
+      });
+    } else if (key === 'activeQuarryId') {
+      safeState[key] = allowed.has(String(value)) ? value : (user.quarryIds[0] || '');
+    } else if (key === 'rates' || key === 'branding' || key === 'billingConfig') {
+      // These legacy settings may contain multiple-quarry configuration; do not expose them to non-admin users yet.
+      safeState[key] = null;
+    } else {
+      safeState[key] = value;
+    }
+  }
+  return res.json(safeState);
 });
 
 // --- ENTITY MUTATION ENDPOINTS ---
@@ -840,13 +855,25 @@ app.delete('/api/driver-collections/:id', (req: Request, res: Response) => {
 });
 
 // Database Full Backup / Reset
-app.post('/api/reset', (req: Request, res: Response) => {
+app.post('/api/reset', requireRole('OWNER'), (req: Request, res: Response) => {
+  if (process.env.ENABLE_RESET !== 'true') {
+    return res.status(403).json({ error: 'Reset is disabled. Set ENABLE_RESET=true deliberately to enable it.' });
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Reset is disabled in production.' });
+  }
+  if (req.headers['x-confirm-reset'] !== 'CONFIRM_RESET') {
+    return res.status(400).json({ error: 'Confirmation required: set X-Confirm-Reset: CONFIRM_RESET' });
+  }
   db = getInitialDatabase();
   saveDatabase(db);
   res.json({ success: true });
 });
 
-app.post('/api/import', (req: Request, res: Response) => {
+app.post('/api/import', requireRole(['OWNER', 'ADMIN']), (req: Request, res: Response) => {
+  if (req.headers['x-confirm-import'] !== 'CONFIRM_IMPORT') {
+    return res.status(400).json({ error: 'Confirmation required: set X-Confirm-Import: CONFIRM_IMPORT' });
+  }
   try {
     const imported = req.body;
     if (imported.loads && imported.vehicles) {
