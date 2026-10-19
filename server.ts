@@ -294,6 +294,48 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Health remains public so deployment health checks can run without credentials.
 app.use('/api', requireAuth);
 
+// Central server-side role policy. Reads remain authenticated; sensitive writes are role-restricted.
+app.use('/api', (req: Request, res: Response, next) => {
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const role = user.role.toUpperCase();
+  const method = req.method.toUpperCase();
+  const pathName = req.path.toLowerCase();
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+
+  if (role === 'VIEWER' && isMutation) {
+    return res.status(403).json({ error: 'Viewer accounts are read-only' });
+  }
+
+  const financialPath = /^\/(income|expenses|payments|statements|ledger)(\/|$)/.test(pathName);
+  if (financialPath && isMutation && !['OWNER', 'ADMIN', 'ACCOUNTS'].includes(role)) {
+    return res.status(403).json({ error: 'Financial mutation requires OWNER, ADMIN, or ACCOUNTS' });
+  }
+
+  const hrPath = /^\/(staff|attendance|advances|payrolls)(\/|$)/.test(pathName);
+  if (hrPath && isMutation && !['OWNER', 'ADMIN', 'HR'].includes(role)) {
+    return res.status(403).json({ error: 'HR mutation requires OWNER, ADMIN, or HR' });
+  }
+
+  if (pathName === '/rates' && isMutation && !['OWNER', 'ADMIN', 'QUARRY_MANAGER'].includes(role)) {
+    return res.status(403).json({ error: 'Rate changes require OWNER, ADMIN, or QUARRY_MANAGER' });
+  }
+
+  const adminConfigPath = /^\/(quarries|branding|billing-config)(\/|$)/.test(pathName);
+  if (adminConfigPath && isMutation && !['OWNER', 'ADMIN'].includes(role)) {
+    return res.status(403).json({ error: 'Configuration changes require OWNER or ADMIN' });
+  }
+
+  if (pathName === '/active-quarry' && isMutation) {
+    const requested = req.body?.activeQuarryId;
+    if (requested && role !== 'OWNER' && role !== 'ADMIN' && !user.quarryIds.includes(String(requested))) {
+      return res.status(403).json({ error: 'No access to the requested quarry' });
+    }
+  }
+
+  return next();
+});
+
 // State is protected and scoped to the authenticated user's server-side quarry memberships.
 app.get('/api/state', (req: Request, res: Response) => {
   const user = req.user;
