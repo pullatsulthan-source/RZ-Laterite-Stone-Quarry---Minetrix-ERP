@@ -12,7 +12,8 @@
     "lint": "tsc --noEmit",
     "migrate": "drizzle-kit migrate",
     "migrate:dev": "drizzle-kit generate --preview && drizzle-kit migrate",
-    "db:seed": "node ./scripts/migrate-json-to-pg.js"
+    "db:seed": "node ./scripts/migrate-json-to-pg.js",
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -29,7 +30,6 @@
     "pg": "^8.11.0",
     "drizzle-orm": "^1.0.0",
     "drizzle-kit": "^1.0.0",
-    "drizzle-orm/node-postgres": "^1.0.0",
     "firebase-admin": "^11.10.0",
     "zod": "^3.22.2",
     "helmet": "^7.0.0",
