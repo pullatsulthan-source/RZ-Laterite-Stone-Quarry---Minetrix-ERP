@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { users, user_quarry_permissions } from '../db/schema';
-import { verifyFirebaseToken } from '../auth/firebase';
+import { verifyIdToken } from '../../src/auth/firebase-admin';
 
 export type AuthenticatedUser = {
   uid: string;
@@ -22,96 +22,83 @@ declare global {
 }
 
 async function upsertUser(uid: string, email?: string, name?: string, photo?: string) {
-  const existing = await db.select().from(users).where(eq(users.id, uid)).limit(1);
-  if (existing.length === 0) {
-    await db.insert(users).values({ id: uid, email: email || '', display_name: name || null, photo_url: photo || null }).run();
-  } else {
-    // update metadata if changed
-    const u = existing[0];
-    const updates: any = {};
-    if (email && u.email !== email) updates.email = email;
-    if (name && u.display_name !== name) updates.display_name = name;
-    if (photo && u.photo_url !== photo) updates.photo_url = photo;
-    if (Object.keys(updates).length > 0) {
-      await db.update(users).set(updates).where(eq(users.id, uid)).run();
-    }
-  }
+  const values = {
+    id: uid,
+    email: email || '',
+    display_name: name || null,
+    photo_url: photo || null,
+    updated_at: new Date(),
+  };
+
+  await db.insert(users).values(values).onConflictDoUpdate({
+    target: users.id,
+    set: {
+      email: values.email,
+      display_name: values.display_name,
+      photo_url: values.photo_url,
+      updated_at: values.updated_at,
+    },
+  });
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-
-  if (!header || !header.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required. Provide Authorization: Bearer <Firebase ID Token>' });
+  if (!header || !/^Bearer\s+\S+$/i.test(header)) {
+    return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const token = header.slice('Bearer '.length).trim();
-
+  const token = header.replace(/^Bearer\s+/i, '').trim();
   try {
-    const decoded: any = await verifyFirebaseToken(token);
-    // upsert user record in DB
+    const decoded = await verifyIdToken(token);
     await upsertUser(decoded.uid, decoded.email, decoded.name, decoded.picture);
 
-    // fetch user info from DB
-    const userRows = await db.select().from(users).where(eq(users.id, decoded.uid)).limit(1);
-    const dbUser = userRows[0];
+    const [dbUser] = await db.select().from(users).where(eq(users.id, decoded.uid)).limit(1);
+    if (!dbUser) return res.status(401).json({ error: 'Application user could not be provisioned' });
 
-    // fetch quarry permissions
-    const perms = await db.select().from(user_quarry_permissions).where(eq(user_quarry_permissions.user_id, decoded.uid));
-    const quarryIds = perms.map((p: any) => p.quarry_id).filter(Boolean);
-    const effectiveRole = (dbUser?.role || 'VIEWER').toUpperCase();
+    const perms = await db.select().from(user_quarry_permissions)
+      .where(eq(user_quarry_permissions.user_id, decoded.uid));
 
     req.user = {
       uid: decoded.uid,
-      email: decoded.email || dbUser?.email || '',
-      name: decoded.name || dbUser?.display_name || null,
-      picture: decoded.picture || dbUser?.photo_url || null,
-      role: effectiveRole,
-      quarryIds,
+      email: decoded.email || dbUser.email || '',
+      name: decoded.name || dbUser.display_name || null,
+      picture: decoded.picture || dbUser.photo_url || null,
+      role: String(dbUser.role || 'VIEWER').toUpperCase(),
+      quarryIds: perms.map((p) => p.quarry_id).filter((id): id is string => Boolean(id)),
     };
-
     return next();
   } catch (error) {
-    console.error('Auth verify error:', error);
-    return res.status(401).json({ error: 'Invalid or expired Firebase token' });
+    // Configuration errors should fail closed without exposing credentials.
+    console.error('[auth] Firebase token verification/provisioning failed');
+    return res.status(401).json({ error: 'Invalid token or authentication service unavailable' });
   }
 }
 
 export function requireRole(allowedRoles: string | string[]) {
-  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
-
+  const roles = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles]).map((role) => role.toUpperCase());
   return (req: Request, res: Response, next: NextFunction) => {
-    const user = req.user;
-    if (!user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const userRole = (user.role || 'VIEWER').toUpperCase();
-    const hasRole = roles.some((role) => role.toUpperCase() === userRole);
-
-    if (!hasRole) {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+    if (!roles.includes(req.user.role.toUpperCase())) {
       return res.status(403).json({ error: 'Forbidden: insufficient role permissions' });
     }
-
     return next();
   };
 }
 
-export function requireQuarryAccess(req: Request, res: Response, next: NextFunction) {
-  const user = req.user;
-  const quarryId = req.params.quarryId || req.params.id || (req.body && req.body.quarryId) || req.query.quarryId;
+export function requireQuarryAccess(paramName = 'quarryId') {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'Authentication required' });
 
-  if (!user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+    const rawQuarryId =
+      req.params[paramName] ||
+      (req.body && req.body.quarryId) ||
+      (typeof req.query.quarryId === 'string' ? req.query.quarryId : undefined);
 
-  if (user.role === 'OWNER' || user.role === 'ADMIN') {
-    return next();
-  }
+    if (!rawQuarryId) return res.status(422).json({ error: 'quarryId is required' });
+    if (user.role === 'OWNER' || user.role === 'ADMIN') return next();
+    if (user.quarryIds.includes(String(rawQuarryId))) return next();
 
-  if (quarryId && user.quarryIds.includes(String(quarryId))) {
-    return next();
-  }
-
-  return res.status(403).json({ error: 'Forbidden: you do not have access to this quarry' });
+    return res.status(403).json({ error: 'Forbidden: no access to this quarry' });
+  };
 }
