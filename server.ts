@@ -348,12 +348,12 @@ app.use((req: Request, res: Response, next) => {
     const queuedWrite = pendingPersistence;
     void queuedWrite.then(() => {
       if (persistenceFailure) {
-        if (!res.headersSent) originalJson.call(res.status(503), { error: 'Database persistence failed; request was not confirmed.' });
+        if (!res.headersSent) { res.status(503); originalJson({ error: 'Database persistence failed; request was not confirmed.' }); }
         return;
       }
       if (!res.headersSent) originalJson(body);
     }).catch(() => {
-      if (!res.headersSent) originalJson.call(res.status(503), { error: 'Database persistence failed; request was not confirmed.' });
+      if (!res.headersSent) { res.status(503); originalJson({ error: 'Database persistence failed; request was not confirmed.' }); }
     });
     return res;
   }) as Response['json'];
