@@ -6,6 +6,8 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { readAppState, writeAppState, verifyAppStateTable } from './backend/db/app-state';
+import { auditRequest } from './backend/audit/audit-logger';
+import { queryAuditLogs } from './backend/audit/audit-query';
 import {
   INITIAL_RATES,
   INITIAL_VEHICLES,
@@ -357,12 +359,55 @@ app.use((req: Request, res: Response, next) => {
   next();
 });
 
+// Request audit runs before authentication so denied/invalid API attempts are also recorded.
+// Firebase authentication is enforced for every API except the public health check.
+app.use('/api', auditRequest);
+app.use('/api', (req: Request, res: Response, next) => {
+  if (req.path === '/health') return next();
+  return requireAuth(req, res, next);
+});
+
 // ----------------- API ROUTES -----------------
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
+
+// Audit trail is restricted to OWNER/ADMIN. The endpoint is excluded from request logging to avoid recursion.
+app.get('/api/audit-logs', requireRole(['OWNER', 'ADMIN']), async (req: Request, res: Response) => {
+  const parseDate = (value: unknown): string | undefined => {
+    if (typeof value !== 'string' || !value.trim()) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  };
+  const rawLimit = Number(req.query.limit ?? 50);
+  const rawOffset = Number(req.query.offset ?? 0);
+  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, Math.trunc(rawLimit))) : 50;
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.trunc(rawOffset)) : 0;
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+  if ((req.query.from && !from) || (req.query.to && !to)) {
+    return res.status(400).json({ error: 'from/to must be valid date-time values' });
+  }
+  try {
+    const result = await queryAuditLogs({
+      limit,
+      offset,
+      userId: typeof req.query.userId === 'string' ? req.query.userId.slice(0, 128) : undefined,
+      action: typeof req.query.action === 'string' ? req.query.action.slice(0, 128) : undefined,
+      quarryId: typeof req.query.quarryId === 'string' ? req.query.quarryId.slice(0, 64) : undefined,
+      from,
+      to,
+    });
+    return res.json(result);
+  } catch {
+    console.error('[audit] Failed to query audit logs');
+    return res.status(500).json({ error: 'Unable to retrieve audit logs' });
+  }
+});
+
+
 
 
 
