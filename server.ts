@@ -272,7 +272,7 @@ function loadDatabase(): QuarryDatabase {
   return freshDb;
 }
 
-const DB_ADAPTER = process.env.DB_ADAPTER || (process.env.DATABASE_URL ? 'postgres' : process.env.NODE_ENV === 'production' ? 'postgres' : 'local-json');
+const DB_ADAPTER = process.env.DB_ADAPTER || 'postgres';
 let persistenceReady = false;
 let pendingPersistence: Promise<void> = Promise.resolve();
 let persistenceFailure: unknown = null;
