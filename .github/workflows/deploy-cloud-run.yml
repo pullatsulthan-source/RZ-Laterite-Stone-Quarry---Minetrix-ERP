@@ -94,7 +94,7 @@ jobs:
             --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
             --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres" \
             --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest" \
-            --add-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --set-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
             --command npm --args run,migrate --max-retries 0 --task-timeout 10m
           gcloud run jobs execute rz-minetrix-migrate --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
 
@@ -111,7 +111,7 @@ jobs:
             --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
             --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres" \
             --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest" \
-            --add-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --set-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
             --command node --args scripts/check-production-bootstrap.js \
             --max-retries 0 --task-timeout 5m
           gcloud run jobs execute rz-minetrix-bootstrap-check --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
