@@ -380,7 +380,7 @@ app.use('/api', (req: Request, res: Response, next) => {
   const pathName = req.path.toLowerCase();
   const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
   const segments = pathName.split('/').filter(Boolean);
-  const resource = segments[1] || '';
+  const resource = segments[0] || '';
   const collectionKey = API_COLLECTIONS[resource];
   const isAdmin = role === 'OWNER' || role === 'ADMIN';
 
@@ -421,7 +421,7 @@ app.use('/api', (req: Request, res: Response, next) => {
       return next();
     }
 
-    const id = req.params.id;
+    const id = req.params.id || segments[1];
     if (!id) return res.status(403).json({ error: 'Quarry-scoped mutation is not supported for this route' });
     const existing = rows.find((row: any) => String(row?.id) === String(id));
     if (!existing) return res.status(404).json({ error: 'Resource not found' });
