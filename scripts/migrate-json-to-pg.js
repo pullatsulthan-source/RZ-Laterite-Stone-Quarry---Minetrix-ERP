@@ -32,6 +32,14 @@ if (!state || typeof state !== 'object' || Array.isArray(state) || !Array.isArra
   process.exit(1);
 }
 
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+  }
+  return value;
+}
+
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 try {
   await pool.query('BEGIN');
@@ -47,7 +55,7 @@ try {
   const verified = await pool.query(
     "SELECT state, version FROM app_state WHERE id = 'default'",
   );
-  if (verified.rowCount !== 1 || JSON.stringify(verified.rows[0].state) !== JSON.stringify(state)) {
+  if (verified.rowCount !== 1 || JSON.stringify(canonical(verified.rows[0].state)) !== JSON.stringify(canonical(state))) {
     throw new Error('Read-back verification failed; migration will be rolled back.');
   }
   await pool.query('COMMIT');
