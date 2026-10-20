@@ -336,6 +336,127 @@ app.use('/api', (req: Request, res: Response, next) => {
   return next();
 });
 
+// Enforce quarry isolation for legacy JSON-backed endpoints until PostgreSQL cutover.
+// This middleware is intentionally fail-closed for non-admin users: records without a quarry
+// cannot be safely exposed or mutated by a quarry-scoped account.
+const API_COLLECTIONS: Record<string, string> = {
+  loads: 'loads',
+  'gate-passes': 'gatePasses',
+  production: 'production',
+  'stock-adjustments': 'stockAdjustments',
+  income: 'income',
+  expenses: 'expenses',
+  payments: 'payments',
+  statements: 'statements',
+  vehicles: 'vehicles',
+  drivers: 'drivers',
+  customers: 'customers',
+  staff: 'staff',
+  attendance: 'attendance',
+  advances: 'advances',
+  payrolls: 'payrolls',
+  rotations: 'rotations',
+  'vehicle-transactions': 'vehicleTransactions',
+  orders: 'orders',
+  quarries: 'quarries',
+  'driver-collections': 'driverCollections',
+};
+
+function rowQuarryId(row: any): string | null {
+  const value = row?.quarryId ?? row?.quarry_id;
+  return value == null || value === '' ? null : String(value);
+}
+
+function canAccessQuarry(user: any, quarryId: unknown): boolean {
+  if (user?.role === 'OWNER' || user?.role === 'ADMIN') return true;
+  return typeof quarryId === 'string' && Array.isArray(user?.quarryIds) && user.quarryIds.includes(quarryId);
+}
+
+app.use('/api', (req: Request, res: Response, next) => {
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const role = String(user.role || 'VIEWER').toUpperCase();
+  const method = req.method.toUpperCase();
+  const pathName = req.path.toLowerCase();
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const segments = pathName.split('/').filter(Boolean);
+  const resource = segments[1] || '';
+  const collectionKey = API_COLLECTIONS[resource];
+  const isAdmin = role === 'OWNER' || role === 'ADMIN';
+
+  // Whole-database import/reset and global state replacement must remain admin-only.
+  if (isMutation && ['/reset', '/import', '/state'].includes(pathName) && !isAdmin) {
+    return res.status(403).json({ error: 'Global data operations require OWNER or ADMIN' });
+  }
+
+  // Global configuration is deliberately withheld from quarry-scoped users until it is stored per quarry.
+  if (!isMutation && ['/branding', '/billing-config'].includes(pathName) && !isAdmin) {
+    return res.status(403).json({ error: 'Configuration is not available to quarry-scoped users' });
+  }
+
+  if (isAdmin || !collectionKey) return next();
+
+  const rows = (db as any)[collectionKey];
+  if (!Array.isArray(rows)) {
+    return res.status(403).json({ error: 'Quarry-scoped access is unavailable for this resource' });
+  }
+
+  if (isMutation) {
+    if (method === 'POST') {
+      const incoming = Array.isArray(req.body) ? req.body : [req.body];
+      const defaultQuarryId = user.quarryIds.length === 1 ? user.quarryIds[0] : null;
+      for (const row of incoming) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+          return res.status(422).json({ error: 'Invalid resource payload' });
+        }
+        const requestedId = row.quarryId ?? row.quarry_id ?? defaultQuarryId;
+        if (requestedId == null) {
+          return res.status(422).json({ error: 'quarryId is required when multiple quarries are assigned' });
+        }
+        if (!canAccessQuarry(user, String(requestedId))) {
+          return res.status(403).json({ error: 'Forbidden: no access to requested quarry' });
+        }
+        row.quarryId = String(requestedId);
+      }
+      return next();
+    }
+
+    const id = req.params.id;
+    if (!id) return res.status(403).json({ error: 'Quarry-scoped mutation is not supported for this route' });
+    const existing = rows.find((row: any) => String(row?.id) === String(id));
+    if (!existing) return res.status(404).json({ error: 'Resource not found' });
+    const existingQuarryId = rowQuarryId(existing);
+    if (!existingQuarryId || !canAccessQuarry(user, existingQuarryId)) {
+      return res.status(403).json({ error: 'Forbidden: resource is outside your quarry' });
+    }
+    const requestedQuarryId = req.body?.quarryId ?? req.body?.quarry_id;
+    if (requestedQuarryId != null && !canAccessQuarry(user, String(requestedQuarryId))) {
+      return res.status(403).json({ error: 'Forbidden: cannot move resource to another quarry' });
+    }
+    return next();
+  }
+
+  // Scope collection reads and prevent direct access to records belonging to another quarry.
+  const originalJson = res.json.bind(res);
+  res.json = ((payload: any) => {
+    if (Array.isArray(payload)) {
+      return originalJson(payload.filter((row: any) => {
+        const quarryId = rowQuarryId(row);
+        return quarryId !== null && canAccessQuarry(user, quarryId);
+      }));
+    }
+    if (payload && typeof payload === 'object' && !('success' in payload) && !('error' in payload)) {
+      const quarryId = rowQuarryId(payload);
+      if (quarryId !== null && !canAccessQuarry(user, quarryId)) {
+        return res.status(403).json({ error: 'Forbidden: resource is outside your quarry' });
+      }
+    }
+    return originalJson(payload);
+  }) as typeof res.json;
+
+  return next();
+});
+
 // State is protected and scoped to the authenticated user's server-side quarry memberships.
 app.get('/api/state', (req: Request, res: Response) => {
   const user = req.user;
