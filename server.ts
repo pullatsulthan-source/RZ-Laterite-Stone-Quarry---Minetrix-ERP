@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { readAppState, writeAppState, verifyAppStateTable } from './backend/db/app-state';
 import {
   INITIAL_RATES,
   INITIAL_VEHICLES,
@@ -271,18 +272,93 @@ function loadDatabase(): QuarryDatabase {
   return freshDb;
 }
 
-function saveDatabase(db: QuarryDatabase) {
-  try {
-    const tempFile = `${DB_FILE}.tmp`;
-    fs.writeFileSync(tempFile, JSON.stringify(db, null, 2), 'utf-8');
-    fs.renameSync(tempFile, DB_FILE);
-  } catch (err) {
-    console.error('Failed to write database file:', err);
-  }
+const DB_ADAPTER = process.env.DB_ADAPTER || (process.env.DATABASE_URL ? 'postgres' : process.env.NODE_ENV === 'production' ? 'postgres' : 'local-json');
+let persistenceReady = false;
+let pendingPersistence: Promise<void> = Promise.resolve();
+let persistenceFailure: unknown = null;
+
+function writeLocalJson(database: QuarryDatabase) {
+  const tempFile = `${DB_FILE}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(database, null, 2), 'utf-8');
+  fs.renameSync(tempFile, DB_FILE);
 }
 
-// In-memory cache synced with disk
+function saveDatabase(database: QuarryDatabase) {
+  if (DB_ADAPTER === 'local-json' || !persistenceReady) {
+    try {
+      writeLocalJson(database);
+    } catch (err) {
+      persistenceFailure = err;
+      console.error('Failed to write local JSON database:', err);
+    }
+    return;
+  }
+
+  // Serialize snapshots in request order so a later write cannot finish before an earlier write.
+  const snapshot = JSON.parse(JSON.stringify(database)) as QuarryDatabase;
+  pendingPersistence = pendingPersistence
+    .catch(() => undefined)
+    .then(() => writeAppState(snapshot))
+    .then(() => { persistenceFailure = null; })
+    .catch((err) => {
+      persistenceFailure = err;
+      console.error('[persistence] PostgreSQL write failed');
+      throw err;
+    });
+  // The API response middleware observes the failure and returns 503 rather than reporting success.
+  void pendingPersistence.catch(() => undefined);
+}
+
+async function initializePersistence() {
+  if (DB_ADAPTER === 'local-json') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('DB_ADAPTER=local-json is not permitted in production.');
+    }
+    persistenceReady = true;
+    console.warn('[persistence] Explicit local JSON adapter enabled; not suitable for multi-instance production.');
+    return;
+  }
+  if (DB_ADAPTER !== 'postgres') throw new Error('DB_ADAPTER must be postgres or local-json.');
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required when DB_ADAPTER=postgres.');
+  await verifyAppStateTable();
+  const storedState = await readAppState();
+  if (storedState) {
+    db = storedState as QuarryDatabase;
+  } else if (process.env.MIGRATE_JSON_TO_POSTGRES === 'true') {
+    // Explicit one-time bootstrap only. Prefer npm run db:seed for an auditable migration.
+    await writeAppState(db as unknown as Record<string, unknown>);
+  } else {
+    throw new Error("PostgreSQL app_state is empty. Apply migrations and run 'npm run db:seed' before starting the API.");
+  }
+  persistenceReady = true;
+  console.log('[persistence] PostgreSQL app_state loaded and verified.');
+}
+
+// In-memory cache initialized from local JSON; PostgreSQL replaces it before the server listens.
 let db: QuarryDatabase = loadDatabase();
+
+
+// Ensure successful API responses are not sent until queued PostgreSQL writes finish.
+app.use((req: Request, res: Response, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => {
+    if (DB_ADAPTER !== 'postgres' || !req.path.startsWith('/api') || res.statusCode >= 400) {
+      return originalJson(body);
+    }
+    const queuedWrite = pendingPersistence;
+    void queuedWrite.then(() => {
+      if (persistenceFailure) {
+        if (!res.headersSent) originalJson.call(res.status(503), { error: 'Database persistence failed; request was not confirmed.' });
+        return;
+      }
+      if (!res.headersSent) originalJson(body);
+    }).catch(() => {
+      if (!res.headersSent) originalJson.call(res.status(503), { error: 'Database persistence failed; request was not confirmed.' });
+    });
+    return res;
+  }) as Response['json'];
+  next();
+});
 
 // ----------------- API ROUTES -----------------
 
@@ -1115,6 +1191,7 @@ app.post('/api/import', requireRole(['OWNER', 'ADMIN']), (req: Request, res: Res
 
 // ----------------- VITE SPA / STATIC HANDLER -----------------
 async function startServer() {
+  await initializePersistence();
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -1133,4 +1210,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error('[startup] Server initialization failed:', error instanceof Error ? error.message : 'unknown error');
+  process.exitCode = 1;
+});
