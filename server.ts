@@ -441,12 +441,21 @@ app.use('/api', (req: Request, res: Response, next) => {
   res.json = ((payload: any) => {
     if (Array.isArray(payload)) {
       return originalJson(payload.filter((row: any) => {
+        // Quarry records are scoped by their own primary key, not a quarryId field.
+        if (collectionKey === 'quarries') {
+          return typeof row?.id === 'string' && canAccessQuarry(user, String(row.id));
+        }
         const quarryId = rowQuarryId(row);
         return quarryId !== null && canAccessQuarry(user, quarryId);
       }));
     }
     if (payload && typeof payload === 'object' && !('success' in payload) && !('error' in payload)) {
-      const quarryId = rowQuarryId(payload);
+      const quarryId = collectionKey === 'quarries' && payload.id != null
+        ? String(payload.id)
+        : rowQuarryId(payload);
+      if (quarryId === null && segments.length > 1) {
+        return res.status(403).json({ error: 'Forbidden: record has no verified quarry scope' });
+      }
       if (quarryId !== null && !canAccessQuarry(user, quarryId)) {
         return res.status(403).json({ error: 'Forbidden: resource is outside your quarry' });
       }
