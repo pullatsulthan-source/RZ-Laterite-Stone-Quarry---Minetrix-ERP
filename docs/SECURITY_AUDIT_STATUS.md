@@ -7,9 +7,9 @@ This document records known verification gaps from the current authentication/da
 ## Findings
 
 ### High — Per-quarry authorization is not verified across all API routes
-- Evidence: The legacy `/api` isolation middleware filters mapped collection reads and checks quarry membership on mapped mutations and item access. `canAccessQuarry` now normalizes role case; nested payroll rows are stamped/validated individually; active-quarry selection is held per user instead of mutating the shared database field; global rates remain administrator-only until per-quarry storage exists. Unit tests cover the quarry-scope helper. Full route-level integration coverage is still absent.
-- Risk: A route/resource not covered by the mapping, legacy rows without quarry ownership metadata, or nested response/data paths could still be incorrectly handled.
-- Required action: Add route-level integration tests for cross-quarry reads/writes and unknown/legacy records; verify all API handlers and nested resources. Keep unverified routes fail-closed.
+- Evidence: The legacy `/api` isolation middleware filters mapped collection reads and checks quarry membership on mapped mutations and item access. `canAccessQuarry` normalizes role case; nested payroll rows are validated individually; active-quarry selection is user-scoped; global rates are administrator-only until per-quarry storage exists. Non-admin requests to unmapped API resources are now denied by default except a short allowlist of endpoints with separate guards. Unit tests cover the quarry-scope helper.
+- Risk: Full route-level integration coverage remains absent; legacy records without quarry ownership metadata are hidden from scoped users, and nested cross-quarry foreign-key/reference validation has not been proven.
+- Required action: Add route-level integration tests for cross-quarry reads/writes and unknown/legacy records; validate referenced entities belong to the same permitted quarry; verify every API handler.
 - Status: IMPROVED / PARTIALLY IMPLEMENTED / NOT VERIFIED.
 
 ### High — Frontend Firebase token integration is not verified
@@ -31,9 +31,9 @@ This document records known verification gaps from the current authentication/da
 - Status: OPEN / NOT VERIFIED.
 
 ### Medium — Build and test baseline
-- Evidence: The prior CI baseline passed on commit `abf392457739f99a6cf3ffa0624835da99e3f035`. New quarry-scope helper tests were added in commit `638a9afdf7bf78ecc4cb53ddfd1f7c4e138356ed`; its GitHub Actions run `39460248111` was pending at last inspection.
-- Required action: Confirm the latest CI run completes successfully; add route-level security integration tests.
-- Status: PRIOR CI BASELINE PASSING; LATEST RUN PENDING; SECURITY AND PRODUCTION READINESS NOT VERIFIED.
+- Evidence: The prior CI baseline passed on commit `abf392457739f99a6cf3ffa0624835da99e3f035`. Quarry-scope helper tests were added and default-deny behavior was tightened through commit `b2d60a1f770cecf628e2453687c433b919fb1185`. GitHub Actions run `39460358746` and CodeQL run `39460358752` for that commit were not complete at last inspection.
+- Required action: Confirm the latest CI and CodeQL runs complete successfully; add route-level security integration tests.
+- Status: PRIOR CI BASELINE PASSING; LATEST RUNS PENDING; SECURITY AND PRODUCTION READINESS NOT VERIFIED.
 
 ## Verification policy
 - A green lint/build result is not proof of authorization correctness or production readiness.
