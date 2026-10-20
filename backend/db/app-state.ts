@@ -10,7 +10,7 @@ export async function readAppState(): Promise<AppState | null> {
   return result.rows[0]?.state ?? null;
 }
 
-export async function writeAppState(state: AppState): Promise<void> {
+export async function writeAppState(state: object): Promise<void> {
   await pool.query(
     `INSERT INTO app_state (id, state, version, updated_at)
      VALUES ($1, $2::jsonb, 1, now())
