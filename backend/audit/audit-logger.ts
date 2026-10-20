@@ -26,7 +26,11 @@ function sanitize(value: unknown, depth = 0): unknown {
 function classifyRoute(path: string): { entity: string; entityId: string | null } {
   const parts = path.split('?')[0].split('/').filter(Boolean);
   const entity = (parts[1] || 'api').slice(0, 128);
-  const entityId = parts.length > 2 ? decodeURIComponent(parts[2]).slice(0, 128) : null;
+  let entityId: string | null = null;
+  if (parts.length > 2) {
+    try { entityId = decodeURIComponent(parts[2]).slice(0, 128); }
+    catch { entityId = parts[2].slice(0, 128); }
+  }
   return { entity, entityId };
 }
 
