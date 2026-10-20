@@ -328,7 +328,10 @@ app.use('/api', (req: Request, res: Response, next) => {
 
   if (pathName === '/active-quarry' && isMutation) {
     const requested = req.body?.activeQuarryId;
-    if (requested && role !== 'OWNER' && role !== 'ADMIN' && !user.quarryIds.includes(String(requested))) {
+    if (requested == null || typeof requested !== 'string' || !requested.trim()) {
+      return res.status(422).json({ error: 'activeQuarryId is required' });
+    }
+    if (!canAccessQuarry(user, requested.trim())) {
       return res.status(403).json({ error: 'No access to the requested quarry' });
     }
   }
@@ -368,8 +371,22 @@ function rowQuarryId(row: any): string | null {
 }
 
 function canAccessQuarry(user: any, quarryId: unknown): boolean {
-  if (user?.role === 'OWNER' || user?.role === 'ADMIN') return true;
-  return typeof quarryId === 'string' && Array.isArray(user?.quarryIds) && user.quarryIds.includes(quarryId);
+  const role = String(user?.role || 'VIEWER').toUpperCase();
+  if (role === 'OWNER' || role === 'ADMIN') return true;
+  return typeof quarryId === 'string'
+    && Array.isArray(user?.quarryIds)
+    && user.quarryIds.some((assignedId: unknown) => String(assignedId) === quarryId);
+}
+
+// Active quarry selection is user-scoped. A shared database field caused one user's
+// selection to change the default quarry seen by every other signed-in user.
+const activeQuarryByUser = new Map<string, string>();
+function getUserActiveQuarry(user: any): string {
+  const assigned = Array.isArray(user?.quarryIds) ? user.quarryIds.map(String) : [];
+  const selected = user?.uid ? activeQuarryByUser.get(String(user.uid)) : undefined;
+  if (selected && canAccessQuarry(user, selected)) return selected;
+  if (assigned.length > 0) return assigned[0];
+  return '';
 }
 
 app.use('/api', (req: Request, res: Response, next) => {
@@ -490,7 +507,7 @@ app.get('/api/state', (req: Request, res: Response) => {
         return quarryId != null && allowed.has(String(quarryId));
       });
     } else if (key === 'activeQuarryId') {
-      safeState[key] = allowed.has(String(value)) ? value : (user.quarryIds[0] || '');
+      safeState[key] = getUserActiveQuarry(user);
     } else if (key === 'rates' || key === 'branding' || key === 'billingConfig') {
       // These legacy settings may contain multiple-quarry configuration; do not expose them to non-admin users yet.
       safeState[key] = null;
@@ -962,12 +979,18 @@ app.delete('/api/quarries/:id', (req: Request, res: Response) => {
 });
 
 app.post('/api/active-quarry', (req: Request, res: Response) => {
-  const { activeQuarryId } = req.body;
-  if (activeQuarryId) {
-    db.activeQuarryId = activeQuarryId;
-    saveDatabase(db);
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const requested = req.body?.activeQuarryId;
+  if (typeof requested !== 'string' || !requested.trim()) {
+    return res.status(422).json({ error: 'activeQuarryId is required' });
   }
-  res.json({ success: true, activeQuarryId: db.activeQuarryId });
+  const activeQuarryId = requested.trim();
+  if (!canAccessQuarry(user, activeQuarryId)) {
+    return res.status(403).json({ error: 'Forbidden: no access to the requested quarry' });
+  }
+  if (user.uid) activeQuarryByUser.set(String(user.uid), activeQuarryId);
+  return res.json({ success: true, activeQuarryId });
 });
 
 // Branding Config
