@@ -18,11 +18,12 @@ This document records known verification gaps from the current authentication/da
 - Required action: Integrate Firebase client auth, attach fresh ID tokens to API requests, and add end-to-end tests.
 - Status: OPEN / NOT VERIFIED.
 
-### High — Runtime persistence is not proven to use PostgreSQL
-- Evidence: `server.ts` still loads and saves `data/quarry_db.json`. The Drizzle schema and migration foundation do not prove the legacy API has been migrated to PostgreSQL.
-- Risk: Data persistence, multi-instance consistency, backup, and tenant isolation assumptions may be incorrect.
-- Required action: Define and execute a reviewed migration plan in a non-production environment; verify every required data path before cutover.
-- Status: OPEN / NOT VERIFIED.
+### High — PostgreSQL runtime persistence is a compatibility bridge, not a completed relational cutover
+- Evidence: The legacy API runtime now has a PostgreSQL-backed `app_state` JSONB persistence adapter, serialized writes, response-level write confirmation, explicit `DB_ADAPTER=local-json` development fallback, and a guarded JSON import script. SQL migration files `0001`–`0003` are applied by the tracked migration runner.
+- Limitation: The existing API still mutates a process-local state snapshot and stores that snapshot in one JSONB row. It is not yet a normalized repository implementation for every business entity, and it is not safe for multiple concurrent application instances because there is no cross-instance optimistic locking/merge strategy. The legacy JSON file is retained and is not deleted by the import command.
+- Risk: A multi-instance deployment can overwrite concurrent updates; database-level row-level security (RLS) and relational CRUD coverage for all business modules are not verified.
+- Required action: Verify migrations and import against a non-production PostgreSQL instance; run CRUD/restart tests; then migrate each module to tenant-filtered Drizzle repositories and add database-enforced RLS before multi-instance/production use.
+- Status: PARTIALLY IMPLEMENTED / DATABASE RUNTIME NOT LIVE-VERIFIED / NOT APPROVED FOR PRODUCTION.
 
 ### Medium — Audit logging service is not verified
 - Evidence: An `audit_logs` schema table exists, but a complete service that records and protects sensitive business changes has not been verified.
