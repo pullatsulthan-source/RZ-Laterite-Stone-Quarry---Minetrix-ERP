@@ -60,7 +60,7 @@ export function auditRequest(req: Request, res: Response, next: NextFunction) {
       `INSERT INTO audit_logs
         (id, request_id, user_id, action, entity, entity_id, quarry_id, before_data, after_data,
          reason, http_method, route, status_code, ip_address, user_agent, metadata, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8::jsonb, $9, $10, $11, $12, $13, $14, $15::jsonb, now())`,
+       VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM quarries WHERE id = $7), NULL, $8::jsonb, $9, $10, $11, $12, $13, $14, $15::jsonb, now())`,
       [
         randomUUID(),
         requestId,
