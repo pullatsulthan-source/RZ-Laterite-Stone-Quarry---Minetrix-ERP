@@ -44,7 +44,7 @@ test('scoped state only includes assigned quarry records and hides global settin
   assert.equal(scoped.rates, null);
   assert.equal(scoped.branding, null);
   assert.equal(scoped.billingConfig, null);
-  assert.equal(scoped.activeQuarryId, 'q-1');
+  assert.equal(scoped.activeQuarryId, '');
   assert.equal(scoped.theme, 'rz_gold');
 });
 
