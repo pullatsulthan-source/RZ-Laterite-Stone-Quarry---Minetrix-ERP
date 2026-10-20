@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { requireAuth, requireRole } from './backend/middleware/auth';
+import { canAccessQuarry, rowQuarryId } from './backend/security/quarry-scope';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -367,18 +368,7 @@ const API_COLLECTIONS: Record<string, string> = {
   'driver-collections': 'driverCollections',
 };
 
-function rowQuarryId(row: any): string | null {
-  const value = row?.quarryId ?? row?.quarry_id;
-  return value == null || value === '' ? null : String(value);
-}
 
-function canAccessQuarry(user: any, quarryId: unknown): boolean {
-  const role = String(user?.role || 'VIEWER').toUpperCase();
-  if (role === 'OWNER' || role === 'ADMIN') return true;
-  return typeof quarryId === 'string'
-    && Array.isArray(user?.quarryIds)
-    && user.quarryIds.some((assignedId: unknown) => String(assignedId) === quarryId);
-}
 
 // Active quarry selection is user-scoped. A shared database field caused one user's
 // selection to change the default quarry seen by every other signed-in user.
