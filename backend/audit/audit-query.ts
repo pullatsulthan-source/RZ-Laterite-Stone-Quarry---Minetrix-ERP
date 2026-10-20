@@ -11,9 +11,9 @@ export type AuditFilters = {
 };
 
 export async function queryAuditLogs(filters: AuditFilters) {
-  const values: unknown[] = [];
+  const values: string[] = [];
   const where: string[] = [];
-  const add = (sql: string, value: unknown) => {
+  const add = (sql: string, value: string) => {
     values.push(value);
     where.push(sql.replace('?', `$${values.length}`));
   };
