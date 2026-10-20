@@ -291,6 +291,24 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// Return only the server-verified identity and effective permissions.
+// Firebase client sign-in alone does not grant ERP access.
+app.get('/api/auth/session', (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  return res.json({
+    authenticated: true,
+    user: {
+      uid: user.uid,
+      email: user.email,
+      name: user.name,
+      picture: user.picture || null,
+      role: user.role,
+      quarryIds: user.quarryIds,
+    },
+  });
+});
+
 // Fail closed: all ERP APIs require a verified Firebase ID token.
 // Health remains public so deployment health checks can run without credentials.
 app.use('/api', requireAuth);
@@ -409,7 +427,7 @@ app.use('/api', (req: Request, res: Response, next) => {
   // quarry scope. These legacy/global endpoints have their own guards below or
   // in their handlers; new endpoints must be added deliberately.
   const explicitlyHandledUnscopedPaths = new Set([
-    '/state', '/active-quarry', '/branding', '/billing-config', '/rates', '/reset', '/import',
+    '/state', '/auth/session', '/active-quarry', '/branding', '/billing-config', '/rates', '/reset', '/import',
   ]);
   if (!collectionKey) {
     if (explicitlyHandledUnscopedPaths.has(pathName)) return next();
