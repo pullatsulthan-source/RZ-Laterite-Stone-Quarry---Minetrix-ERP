@@ -7,10 +7,10 @@ This document records known verification gaps from the current authentication/da
 ## Findings
 
 ### High — Per-quarry authorization is not verified across all API routes
-- Evidence: `server.ts` now has a legacy `/api` isolation middleware that filters selected collection reads and checks quarry membership for selected mutations and item reads. This middleware has not yet been covered by route-level integration tests, and not every handler/resource path has been proven isolated.
-- Risk: A signed-in user could potentially reach data belonging to another quarry through a route that is not covered correctly, or through legacy records without quarry ownership metadata.
-- Required action: Inventory all `/api` routes; add route/resource-level authorization tests for cross-quarry reads and writes, including legacy records and nested routes. Deny access by default.
-- Status: PARTIALLY IMPLEMENTED / NOT VERIFIED.
+- Evidence: The legacy `/api` isolation middleware filters mapped collection reads and checks quarry membership on mapped mutations and item access. `canAccessQuarry` now normalizes role case; nested payroll rows are stamped/validated individually; active-quarry selection is held per user instead of mutating the shared database field; global rates remain administrator-only until per-quarry storage exists. Unit tests cover the quarry-scope helper. Full route-level integration coverage is still absent.
+- Risk: A route/resource not covered by the mapping, legacy rows without quarry ownership metadata, or nested response/data paths could still be incorrectly handled.
+- Required action: Add route-level integration tests for cross-quarry reads/writes and unknown/legacy records; verify all API handlers and nested resources. Keep unverified routes fail-closed.
+- Status: IMPROVED / PARTIALLY IMPLEMENTED / NOT VERIFIED.
 
 ### High — Frontend Firebase token integration is not verified
 - Evidence: The server expects a Bearer token for protected `/api` endpoints. The frontend's complete sign-in, token refresh, and authenticated API request flow has not been validated end to end.
@@ -31,9 +31,9 @@ This document records known verification gaps from the current authentication/da
 - Status: OPEN / NOT VERIFIED.
 
 ### Medium — Build and test baseline
-- Evidence: GitHub Actions run `39459572405` for commit `abf392457739f99a6cf3ffa0624835da99e3f035` completed successfully. Dependency installation, TypeScript check, production build, test step, and artifact upload all reported success. CodeQL analysis completed its analysis step successfully in the paired run; workflow cleanup was still in progress at last inspection.
-- Required action: Keep CI green for subsequent changes and add route-level security integration tests.
-- Status: CI BASELINE PASSING; SECURITY AND PRODUCTION READINESS NOT VERIFIED.
+- Evidence: The prior CI baseline passed on commit `abf392457739f99a6cf3ffa0624835da99e3f035`. New quarry-scope helper tests were added in commit `638a9afdf7bf78ecc4cb53ddfd1f7c4e138356ed`; its GitHub Actions run `39460248111` was pending at last inspection.
+- Required action: Confirm the latest CI run completes successfully; add route-level security integration tests.
+- Status: PRIOR CI BASELINE PASSING; LATEST RUN PENDING; SECURITY AND PRODUCTION READINESS NOT VERIFIED.
 
 ## Verification policy
 - A green lint/build result is not proof of authorization correctness or production readiness.
