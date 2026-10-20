@@ -10,9 +10,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "migrate": "drizzle-kit migrate",
-    "migrate:dev": "drizzle-kit generate --preview && drizzle-kit migrate",
-    "db:seed": "node ./scripts/migrate-json-to-pg.js",
+    "migrate": "node ./scripts/migrate-postgres.js",
+    "migrate:dev": "node ./scripts/migrate-postgres.js",
+    "db:seed": "node ./scripts/migrate-postgres.js && node ./scripts/migrate-json-to-pg.js",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
