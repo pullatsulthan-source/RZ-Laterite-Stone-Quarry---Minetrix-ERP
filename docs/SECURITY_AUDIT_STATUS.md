@@ -41,3 +41,14 @@ This document records known verification gaps from the current authentication/da
 - Never claim a check passed unless a completed CI run or reproducible local output supports it.
 - Do not run production migrations, deploy, or merge high-risk changes without human review.
 - Keep real credentials, Firebase private keys, and production data out of source control.
+
+
+## Audit logging update (2026-10-20)
+
+- Added PostgreSQL-backed request audit middleware for API requests, including rejected/invalid authentication attempts where the request reaches the application.
+- Added migration `drizzle/0004_audit_logging.sql` for request metadata and query indexes.
+- Added OWNER/ADMIN-only `GET /api/audit-logs` with pagination and filters.
+- Sensitive request-body fields are redacted; audit query access is role-restricted.
+- The logger records request payload as `after_data`; `before_data` remains null until business routes are migrated to transactional before/after snapshots.
+- Audit insert failures are reported to operational logs and do not roll back completed business mutations. Therefore this is an initial request-level audit capability, not yet tamper-evident or sufficient as sole compliance evidence.
+- Apply migrations and verify audit rows against a test PostgreSQL instance before production use. CI status is pending for the current branch head.
