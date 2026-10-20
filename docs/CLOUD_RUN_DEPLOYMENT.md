@@ -19,7 +19,7 @@ The current state adapter stores the ERP snapshot in one PostgreSQL JSONB row. T
 7. Initialize the production database deliberately. Run the numbered migrations, then populate `app_state/default` from an approved initial ERP state with at least one correctly configured quarry, all required collections, rates, branding, and billing configuration. **Do not use `npm run db:seed` against production unless you explicitly intend to import the demo JSON.** The workflow's bootstrap check will stop deployment if this is missing.
 8. In GitHub repository Settings → Environments, create `production`. Add these **Variables**:
    - `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_SQL_INSTANCE` (format: `project:region:instance`)
-   - `FIREBASE_PROJECT_ID`, `BOOTSTRAP_OWNER_UID` (the Firebase UID that must be provisioned as the initial OWNER)
+   - `FIREBASE_PROJECT_ID`, `BOOTSTRAP_OWNER_UID` (the Firebase UID that must be provisioned as the initial OWNER for first deployment), `OWNER_BOOTSTRAP_COMPLETED` (set to `false` or leave unset for initial bootstrap)
    - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`
 9. Add these **Environment secrets**:
    - `GCP_WORKLOAD_IDENTITY_PROVIDER` (full provider resource name)
@@ -33,7 +33,7 @@ The current state adapter stores the ERP snapshot in one PostgreSQL JSONB row. T
 3. Select the intended branch/commit and start the workflow.
 4. Confirm all jobs succeed and inspect the Cloud Run URL. The health check is public at `/api/health`; all ERP API endpoints except health require a verified Firebase ID token.
 
-The first OWNER account is bootstrapped only when its UID matches `BOOTSTRAP_OWNER_UID`. Once the intended owner has successfully signed in and their database role is verified, remove that GitHub variable and redeploy. The OWNER role remains in the database; removing the variable prevents automatic re-promotion on later sign-ins.
+The first OWNER account is bootstrapped only when its UID matches `BOOTSTRAP_OWNER_UID`. Once the intended owner has successfully signed in and their database role is verified, remove `BOOTSTRAP_OWNER_UID`, set `OWNER_BOOTSTRAP_COMPLETED=true`, and redeploy. The OWNER role remains in the database; removing the UID prevents automatic re-promotion on later sign-ins.
 
 ## Important gates and limitations
 
