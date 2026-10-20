@@ -127,3 +127,12 @@ export const user_quarry_permissions = pgTable('user_quarry_permissions', {
   quarry_id: varchar('quarry_id', { length: 64 }).notNull().references(() => quarries.id),
   created_at: timestamp('created_at').default(sql`now()`).notNull(),
 });
+
+// Durable compatibility store for the existing multi-module API state.
+// Business entities are progressively normalized into the relational tables above.
+export const app_state = pgTable('app_state', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  state: jsonb('state').notNull(),
+  version: integer('version').notNull().default(1),
+  updated_at: timestamp('updated_at', { withTimezone: true }).default(sql`now()`).notNull(),
+});
