@@ -31,7 +31,8 @@ function classifyRoute(path: string): { entity: string; entityId: string | null 
 }
 
 export function auditRequest(req: Request, res: Response, next: NextFunction) {
-  if (!req.path.startsWith('/api') || req.path === '/api/health' || req.path === '/api/audit-logs') {
+  const pathname = req.originalUrl.split('?')[0];
+  if (!pathname.startsWith('/api') || pathname === '/api/health' || pathname === '/api/audit-logs') {
     return next();
   }
 
