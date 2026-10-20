@@ -403,7 +403,18 @@ app.use('/api', (req: Request, res: Response, next) => {
     return res.status(403).json({ error: 'Configuration is not available to quarry-scoped users' });
   }
 
-  if (isAdmin || !collectionKey) return next();
+  if (isAdmin) return next();
+
+  // Fail closed for any API resource that has not been explicitly mapped to a
+  // quarry scope. These legacy/global endpoints have their own guards below or
+  // in their handlers; new endpoints must be added deliberately.
+  const explicitlyHandledUnscopedPaths = new Set([
+    '/state', '/active-quarry', '/branding', '/billing-config', '/rates', '/reset', '/import',
+  ]);
+  if (!collectionKey) {
+    if (explicitlyHandledUnscopedPaths.has(pathName)) return next();
+    return res.status(403).json({ error: 'Quarry scope is not configured for this endpoint' });
+  }
 
   const rows = (db as any)[collectionKey];
   if (!Array.isArray(rows)) {
