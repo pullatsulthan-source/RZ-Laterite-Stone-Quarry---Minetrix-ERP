@@ -109,6 +109,13 @@ export const ledger_entries = pgTable('ledger_entries', {
 
 export const audit_logs = pgTable('audit_logs', {
   id: varchar('id', { length: 64 }).primaryKey(),
+  request_id: varchar('request_id', { length: 128 }),
+  http_method: varchar('http_method', { length: 16 }),
+  route: text('route'),
+  status_code: integer('status_code'),
+  ip_address: varchar('ip_address', { length: 128 }),
+  user_agent: text('user_agent'),
+  metadata: jsonb('metadata'),
   user_id: varchar('user_id', { length: 128 }),
   action: varchar('action', { length: 128 }),
   entity: varchar('entity', { length: 128 }),
