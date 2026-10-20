@@ -317,11 +317,13 @@ app.use('/api', (req: Request, res: Response, next) => {
     return res.status(403).json({ error: 'HR mutation requires OWNER, ADMIN, or HR' });
   }
 
-  if (pathName === '/rates' && isMutation && !['OWNER', 'ADMIN', 'QUARRY_MANAGER'].includes(role)) {
-    return res.status(403).json({ error: 'Rate changes require OWNER, ADMIN, or QUARRY_MANAGER' });
+  // Rates are still stored globally in the legacy JSON store. Until rates are
+  // persisted per quarry, only global administrators may read or mutate them.
+  if (pathName === '/rates' && isMutation && !['OWNER', 'ADMIN'].includes(role)) {
+    return res.status(403).json({ error: 'Global rates require OWNER or ADMIN until per-quarry rate storage is enabled' });
   }
 
-  const adminConfigPath = /^\/(quarries|branding|billing-config)(\/|$)/.test(pathName);
+  const adminConfigPath = /^\/(quarries|branding|billing-config|rates)(\/|$)/.test(pathName);
   if (adminConfigPath && isMutation && !['OWNER', 'ADMIN'].includes(role)) {
     return res.status(403).json({ error: 'Configuration changes require OWNER or ADMIN' });
   }
@@ -420,13 +422,18 @@ app.use('/api', (req: Request, res: Response, next) => {
 
   if (isMutation) {
     if (method === 'POST') {
-      const incoming = Array.isArray(req.body) ? req.body : [req.body];
+      // Payroll creation wraps its rows in { month, payrolls: [...] }; scope every
+      // persisted row, not merely the request envelope.
+      const nestedRows = resource === 'payrolls' && !Array.isArray(req.body) && Array.isArray(req.body?.payrolls)
+        ? req.body.payrolls
+        : null;
+      const incoming = Array.isArray(req.body) ? req.body : (nestedRows || [req.body]);
       const defaultQuarryId = user.quarryIds.length === 1 ? user.quarryIds[0] : null;
       for (const row of incoming) {
         if (!row || typeof row !== 'object' || Array.isArray(row)) {
           return res.status(422).json({ error: 'Invalid resource payload' });
         }
-        const requestedId = row.quarryId ?? row.quarry_id ?? defaultQuarryId;
+        const requestedId = row.quarryId ?? row.quarry_id ?? req.body?.quarryId ?? req.body?.quarry_id ?? defaultQuarryId;
         if (requestedId == null) {
           return res.status(422).json({ error: 'quarryId is required when multiple quarries are assigned' });
         }
@@ -434,6 +441,10 @@ app.use('/api', (req: Request, res: Response, next) => {
           return res.status(403).json({ error: 'Forbidden: no access to requested quarry' });
         }
         row.quarryId = String(requestedId);
+      }
+      if (nestedRows && req.body && typeof req.body === 'object') {
+        const envelopeQuarryId = req.body.quarryId ?? req.body.quarry_id ?? defaultQuarryId;
+        if (envelopeQuarryId != null) req.body.quarryId = String(envelopeQuarryId);
       }
       return next();
     }
