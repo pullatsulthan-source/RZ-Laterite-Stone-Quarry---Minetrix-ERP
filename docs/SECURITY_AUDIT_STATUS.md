@@ -12,7 +12,7 @@ This document records known verification gaps from the current authentication/da
 - Required action: Add route-level integration tests for cross-quarry reads/writes and unknown/legacy records; validate referenced entities belong to the same permitted quarry; verify every API handler.
 - Status: IMPROVED / PARTIALLY IMPLEMENTED / NOT VERIFIED.
 
-### High — Frontend Firebase token integration is not verified
+### High — Frontend Firebase token integration is partially implemented but not end-to-end verified
 - Evidence: The server expects a Bearer token for protected `/api` endpoints. The frontend's complete sign-in, token refresh, and authenticated API request flow has not been validated end to end.
 - Risk: Legitimate frontend requests may fail with 401 responses, or authentication behavior may differ between screens.
 - Required action: Integrate Firebase client auth, attach fresh ID tokens to API requests, and add end-to-end tests.
