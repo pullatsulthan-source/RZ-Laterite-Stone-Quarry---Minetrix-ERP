@@ -324,9 +324,6 @@ async function initializePersistence() {
   const storedState = await readAppState();
   if (storedState) {
     db = storedState as unknown as QuarryDatabase;
-  } else if (process.env.MIGRATE_JSON_TO_POSTGRES === 'true') {
-    // Explicit one-time bootstrap only. Prefer npm run db:seed for an auditable migration.
-    await writeAppState(db as unknown as Record<string, unknown>);
   } else {
     throw new Error("PostgreSQL app_state is empty. Apply migrations and run 'npm run db:seed' before starting the API.");
   }
