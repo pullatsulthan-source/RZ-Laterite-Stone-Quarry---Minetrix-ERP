@@ -26,6 +26,10 @@ The current state adapter stores the ERP snapshot in one PostgreSQL JSONB row. T
    - `GCP_SERVICE_ACCOUNT` (service account email used by the workflow and Cloud Run)
 10. Make sure the GitHub Actions workflow has permission to use the production environment. Build-time `VITE_*` values are browser-visible Firebase configuration, not server credentials. Never put Firebase Admin private keys or database credentials in `VITE_*` variables.
 
+## Release branch requirement
+
+GitHub's manual `workflow_dispatch` entry point is available only when this workflow exists on the repository's default branch. This change is prepared against the current authenticated feature branch, not directly against `main`. After CI passes, integrate the security/auth/database feature branch into the intended release branch through a reviewed pull request, then merge the approved release into `main`; only then will the workflow be available from the default Actions page. Do not merge the divergent feature branch blindly: review its full diff and resolve any main-branch drift first.
+
 ## Deploy
 
 1. Open the repository's Actions tab.
