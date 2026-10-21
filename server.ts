@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { requireAuth, requireRole } from './backend/middleware/auth';
-import { canAccessQuarry, rowQuarryId } from './backend/security/quarry-scope';
+import { canAccessQuarry, rowQuarryId, scopeStateForUser } from './backend/security/quarry-scope';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -638,33 +638,11 @@ app.get('/api/state', (req: Request, res: Response) => {
   if (!user) return res.status(401).json({ error: 'Authentication required' });
   if (user.role === 'OWNER' || user.role === 'ADMIN') return res.json(db);
 
-  const allowed = new Set(user.quarryIds);
-  const scopedArrays = new Set([
-    'vehicles', 'drivers', 'customers', 'staff', 'attendance', 'advances',
-    'payrolls', 'loads', 'gatePasses', 'production', 'stockAdjustments',
-    'income', 'expenses', 'payments', 'statements', 'rotations',
-    'vehicleTransactions', 'orders', 'driverCollections',
-  ]);
-  const safeState: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(db)) {
-    if (key === 'quarries') {
-      safeState[key] = (db.quarries || []).filter((q: any) => allowed.has(String(q.id)));
-    } else if (scopedArrays.has(key) && Array.isArray(value)) {
-      // Legacy rows without an explicit quarry ID are excluded for non-admin users.
-      safeState[key] = value.filter((row: any) => {
-        const quarryId = row?.quarryId ?? row?.quarry_id;
-        return quarryId != null && allowed.has(String(quarryId));
-      });
-    } else if (key === 'activeQuarryId') {
-      safeState[key] = getUserActiveQuarry(user);
-    } else if (key === 'rates' || key === 'branding' || key === 'billingConfig') {
-      // These legacy settings may contain multiple-quarry configuration; do not expose them to non-admin users yet.
-      safeState[key] = null;
-    } else {
-      safeState[key] = value;
-    }
-  }
-  return res.json(safeState);
+  return res.json(scopeStateForUser(
+    db as unknown as Record<string, unknown>,
+    user,
+    getUserActiveQuarry(user),
+  ));
 });
 
 // --- ENTITY MUTATION ENDPOINTS ---
