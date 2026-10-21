@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import { readAppState, writeAppState, verifyAppStateTable } from './backend/db/app-state';
 import { auditRequest } from './backend/audit/audit-logger';
 import { queryAuditLogs } from './backend/audit/audit-query';
@@ -361,6 +362,13 @@ app.use((req: Request, res: Response, next) => {
 
 // Request audit runs before authentication so denied/invalid API attempts are also recorded.
 // Firebase authentication is enforced for every API except the public health check.
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', apiLimiter);
 app.use('/api', auditRequest);
 app.use('/api', (req: Request, res: Response, next) => {
   if (req.path === '/health') return next();
