@@ -722,9 +722,6 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   ]);
 
   // Refresh data from shared backend database
-  const [backendReady, setBackendReady] = useState(!IS_PRODUCTION_CLIENT);
-  const [backendError, setBackendError] = useState<string | null>(null);
-
   const refreshBackendData = useCallback(async () => {
     try {
       const response = await fetch('/api/state', { cache: 'no-store' });
