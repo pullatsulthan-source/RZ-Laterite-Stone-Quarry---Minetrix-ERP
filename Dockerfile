@@ -13,7 +13,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server.ts ./server.ts
