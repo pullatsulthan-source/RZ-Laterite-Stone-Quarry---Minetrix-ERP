@@ -18,6 +18,8 @@ test('fails closed when the allowlist is unset or incomplete', () => {
 test('fails closed when allowlist contains duplicates or malformed addresses', () => {
   assert.equal(isAllowedFirebaseIdentity('nafid@example.com', true, 'nafid@example.com,NAFID@example.com'), false);
   assert.equal(isAllowedFirebaseIdentity('nafid@example.com', true, 'nafid@example.com,not-an-email'), false);
+  assert.deepEqual(parseAllowedEmails('one@,two@example.com'), []);
+  assert.deepEqual(parseAllowedEmails('one@example.com,two@'), []);
 });
 
 test('rejects an email that is not an exact allowlist member', () => {
