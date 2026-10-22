@@ -114,7 +114,7 @@ jobs:
             --command npm --args run,migrate --max-retries 0 --task-timeout 10m
           gcloud run jobs execute rz-minetrix-migrate --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
 
-      - name: Verify production database is deliberately initialized
+      - name: Ensure production state row exists without importing demo data
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_REGION: ${{ vars.GCP_REGION }}
@@ -122,6 +122,18 @@ jobs:
           IMAGE_URI: ${{ steps.build.outputs.image_uri }}
         run: |
           set -euo pipefail
+          gcloud run jobs deploy rz-minetrix-safe-bootstrap \
+            --image "$IMAGE_URI" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
+            --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
+            --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres,CONFIRM_EMPTY_PRODUCTION_BOOTSTRAP=YES" \
+            --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest" \
+            --set-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --command node --args --import,tsx,scripts/bootstrap-production.ts \
+            --max-retries 0 --task-timeout 5m
+          gcloud run jobs execute rz-minetrix-safe-bootstrap --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
+
+          # Empty state is deliberately not deemed production-ready. A valid quarry profile,
+          # rates, branding and billing configuration must exist before a service is deployed.
           gcloud run jobs deploy rz-minetrix-bootstrap-check \
             --image "$IMAGE_URI" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
             --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
@@ -131,7 +143,8 @@ jobs:
             --command node --args scripts/check-production-bootstrap.js \
             --max-retries 0 --task-timeout 5m
           gcloud run jobs execute rz-minetrix-bootstrap-check --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
-          if [ -n "${{ vars.BOOTSTRAP_OWNER_UID }}" ]; then
+
+          if [ -n "${{ vars.BOOTSTRAP_OWNER_UID }}" ] || [ -n "${{ vars.BOOTSTRAP_ADMIN_UID }}" ]; then
             gcloud run jobs deploy rz-minetrix-owner-bootstrap \
               --image "$IMAGE_URI" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
               --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
