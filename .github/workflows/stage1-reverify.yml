@@ -1,0 +1,42 @@
+name: Stage 1 Reverification
+
+on:
+  push:
+    branches: ['fix/stage1-ci-production-gate']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Stage 1 full verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ''
+      - name: Refresh npm tooling and cache
+        run: |
+          npm install --global npm@11
+          npm --version
+          npm cache clean --force
+      - name: Install dependencies
+        env:
+          npm_config_audit: "false"
+          npm_config_fund: "false"
+          npm_config_prefer_online: "true"
+        run: npm install --no-audit --no-fund --prefer-online
+      - name: Typecheck / lint
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Docker build
+        run: docker build --tag rz-minetrix-erp:${{ github.sha }} .

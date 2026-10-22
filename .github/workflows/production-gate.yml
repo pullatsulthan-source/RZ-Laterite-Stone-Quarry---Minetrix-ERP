@@ -18,7 +18,7 @@ jobs:
   verify:
     name: Verify application
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,14 +26,24 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 22
+          cache: ''
 
       - name: Verify package manifest
         run: test -f package.json
 
+      - name: Refresh npm tooling and cache
+        run: |
+          npm install --global npm@11
+          npm --version
+          npm cache clean --force
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        env:
+          npm_config_audit: "false"
+          npm_config_fund: "false"
+          npm_config_prefer_online: "true"
+        run: npm install --no-audit --no-fund --prefer-online
 
       - name: Typecheck / lint
         run: npm run lint
