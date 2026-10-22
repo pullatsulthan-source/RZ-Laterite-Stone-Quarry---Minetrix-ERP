@@ -1,18 +1,23 @@
-FROM node:22-alpine
-
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY . .
+RUN npm run build
+
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 
-COPY . .
-
-RUN npm install --no-audit --no-fund
-RUN npm run build
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/server.ts ./server.ts
+COPY --from=build /app/src ./src
 
 EXPOSE 3000
-
-CMD ["npm", "start"]
+CMD ["node", "--import", "tsx", "server.ts"]
