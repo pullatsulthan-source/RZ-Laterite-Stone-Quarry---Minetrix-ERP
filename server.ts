@@ -238,3 +238,28 @@ function route(pathName: string, collection: keyof QuarryDatabase, validator?: a
     (db[collection] as any) = after; saveDatabase(db); return res.json({ success: true });
   });
 }
+
+app.post('/api/reset', requireRole('OWNER'), (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production' || process.env.ENABLE_RESET !== 'true') return res.status(403).json({ error: 'Reset disabled' });
+  if (req.headers['x-confirm-reset'] !== 'CONFIRM_RESET') return res.status(400).json({ error: 'Explicit reset confirmation required' });
+  db = getInitialDatabase(); saveDatabase(db); return res.json({ success: true });
+});
+app.post('/api/import', requireRole(['OWNER', 'ADMIN']), (req: Request, res: Response) => {
+  if (req.headers['x-confirm-import'] !== 'CONFIRM_IMPORT') return res.status(400).json({ error: 'Explicit import confirmation required' });
+  const data = req.body;
+  if (!data || !Array.isArray(data.loads) || !Array.isArray(data.vehicles)) return res.status(400).json({ error: 'Invalid backup structure' });
+  db = data; saveDatabase(db); return res.json({ success: true });
+});
+app.all(/^\/api\/(.*)/, (_req: Request, res: Response) => res.status(404).json({ error: 'Unknown API route' }));
+async function startServer() {
+  await initializePersistence();
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.resolve(process.cwd(), 'dist')));
+    app.get('*', (_req: Request, res: Response) => res.sendFile(path.resolve(process.cwd(), 'dist/index.html')));
+  }
+  app.listen(PORT, '0.0.0.0', () => console.log(`[RZ MINETRIX ERP] Server running on http://0.0.0.0:${PORT}`));
+}
+startServer().catch(error => { console.error('[startup] Server initialization failed:', error instanceof Error ? error.message : 'unknown error'); process.exitCode = 1; });
