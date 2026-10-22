@@ -135,10 +135,10 @@ jobs:
             gcloud run jobs deploy rz-minetrix-owner-bootstrap \
               --image "$IMAGE_URI" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
               --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
-              --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres,FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }},BOOTSTRAP_OWNER_UID=${{ vars.BOOTSTRAP_OWNER_UID }},BOOTSTRAP_ADMIN_UID=${{ vars.BOOTSTRAP_ADMIN_UID }}" \
+              --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres,BOOTSTRAP_OWNER_UID=${{ vars.BOOTSTRAP_OWNER_UID }},BOOTSTRAP_ADMIN_UID=${{ vars.BOOTSTRAP_ADMIN_UID }}" \
               --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest" \
               --set-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
-              --command node --args scripts/bootstrap-user-roles.js \
+              --command node --args --import,tsx,scripts/bootstrap-user-roles.ts \
               --max-retries 0 --task-timeout 5m
             gcloud run jobs execute rz-minetrix-owner-bootstrap --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
           fi
