@@ -51,16 +51,15 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const { eq } = await import('drizzle-orm');
     const [dbUser] = await db.select().from(schema.users).where(eq(schema.users.id, decoded.uid)).limit(1);
     if (!dbUser) return res.status(401).json({ error: 'Application user could not be provisioned' });
-
-    const memberships = await db.select().from(schema.quarryMemberships)
-      .where(eq(schema.quarryMemberships.userId, decoded.uid));
+    const permissions = await db.select().from(schema.user_quarry_permissions)
+      .where(eq(schema.user_quarry_permissions.user_id, decoded.uid));
     req.user = {
       uid: decoded.uid,
       email: decoded.email || dbUser.email || '',
       name: decoded.name || dbUser.display_name || null,
       picture: decoded.picture || dbUser.photo_url || null,
       role: String(dbUser.role || 'VIEWER').toUpperCase(),
-      quarryIds: memberships.filter((m: { active: boolean }) => m.active).map((m: { quarryId: string }) => m.quarryId),
+      quarryIds: permissions.map((p: { quarry_id: string }) => p.quarry_id),
     };
     return next();
   } catch {
