@@ -1,53 +1,9 @@
 #!/usr/bin/env node
-/**
- * scripts/migrate-json-to-pg.ts
- * Phase 1 placeholder: migration utility that will be implemented fully in Phase 5.
- * For now this script reads data/quarry_db.json and prints a summary of top-level keys
- * and counts to help planning the migration.
- */
-
-import fs from 'fs';
-import path from 'path';
-
-const DB_PATH = path.resolve(process.cwd(), 'data', 'quarry_db.json');
-
-function main() {
-  if (!fs.existsSync(DB_PATH)) {
-    console.error('No JSON DB found at', DB_PATH);
-    process.exit(1);
-  }
-
-  const raw = fs.readFileSync(DB_PATH, 'utf-8');
-  let db: any;
-  try {
-    db = JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to parse JSON DB:', e);
-    process.exit(1);
-  }
-
-  const keys = Object.keys(db || {});
-  console.log('Found top-level keys:', keys);
-  keys.forEach((k) => {
-    const v = db[k];
-    if (Array.isArray(v)) {
-      console.log(`  - ${k}: ${v.length} records`);
-    } else if (v && typeof v === 'object') {
-      console.log(`  - ${k}: object with keys ${Object.keys(v).join(', ')}`);
-    } else {
-      console.log(`  - ${k}: ${typeof v}`);
-    }
-  });
-
-  console.log('\nMigration utility placeholder — full migration will be implemented in Phase 5.');
-}
-
-main();
-import fs from 'fs';
-import path from 'path';
-import { db, pool, isDatabaseConfigured } from '../src/db/index.ts';
+/** Safely imports quarry data from the legacy JSON store into PostgreSQL. */
+import fs from 'node:fs';
+import path from 'node:path';
+import { db, isDatabaseConfigured } from '../src/db/index.ts';
 import * as schema from '../src/db/schema.ts';
-import { sql } from 'drizzle-orm';
 
 interface ReconciliationMetric {
   sourceCount: number;
@@ -57,288 +13,86 @@ interface ReconciliationMetric {
 }
 
 async function runMigration() {
-  console.log('====================================================');
-  console.log('RZ MINETRIX — JSON to PostgreSQL Database Migration');
-  console.log('====================================================\n');
-
-  if (!isDatabaseConfigured()) {
-    console.warn('⚠️ WARNING: DATABASE_URL is not set or not pointing to PostgreSQL.');
-    console.warn('Set DATABASE_URL to run live database insertion.');
-    console.warn('Running dry-run validation & schema transformation check only...\n');
-  }
-
+  if (!isDatabaseConfigured()) throw new Error('DATABASE_URL must be configured for a real migration; dry runs must not report data as imported.');
   const jsonFilePath = path.resolve(process.cwd(), 'data', 'quarry_db.json');
-  if (!fs.existsSync(jsonFilePath)) {
-    console.error(`❌ Source JSON file not found at: ${jsonFilePath}`);
-    process.exit(1);
+  if (!fs.existsSync(jsonFilePath)) throw new Error(`Source JSON file not found: ${jsonFilePath}`);
+  const data = JSON.parse(fs.readFileSync(jsonFilePath, 'utf-8'));
+  const metrics: Record<string, ReconciliationMetric> = {};
+  const collections = ['quarries','vehicles','drivers','customers','staff','orders','loads','gatePasses','production','expenses','payments','income'];
+  for (const name of collections) {
+    const values = Array.isArray(data[name]) ? data[name] : [];
+    metrics[name] = { sourceCount: values.length, importedCount: 0, skippedCount: 0, failedCount: 0 };
   }
-
-  const rawData = fs.readFileSync(jsonFilePath, 'utf-8');
-  let data: any;
-  try {
-    data = JSON.parse(rawData);
-  } catch (err: any) {
-    console.error(`❌ Failed to parse JSON: ${err.message}`);
-    process.exit(1);
-  }
-
-  const metrics: Record<string, ReconciliationMetric> = {
-    quarries: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    vehicles: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    drivers: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    customers: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    staff: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    orders: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    loads: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    gatePasses: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    production: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    expenses: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    payments: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
-    income: { sourceCount: 0, importedCount: 0, skippedCount: 0, failedCount: 0 },
+  const defaultQuarryId = String(data.activeQuarryId || data.quarries?.[0]?.id || 'quarry-001');
+  const numeric = (v: unknown, fallback = 0) => {
+    const n = Number(v ?? fallback);
+    return Number.isFinite(n) ? String(n) : String(fallback);
   };
-
-  // Financial sums
-  let sourceTotalQuarryRevenue = 0;
-  let sourceTotalExpenses = 0;
-  let sourceTotalPayments = 0;
-  let destTotalQuarryRevenue = 0;
-  let destTotalExpenses = 0;
-  let destTotalPayments = 0;
-
-  const defaultQuarryId = data.activeQuarryId || 'quarry-001';
-
-  // 1. Quarries
-  const rawQuarries = Array.isArray(data.quarries) ? data.quarries : [];
-  metrics.quarries.sourceCount = rawQuarries.length;
-
-  // 2. Vehicles
-  const rawVehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
-  metrics.vehicles.sourceCount = rawVehicles.length;
-
-  // 3. Drivers
-  const rawDrivers = Array.isArray(data.drivers) ? data.drivers : [];
-  metrics.drivers.sourceCount = rawDrivers.length;
-
-  // 4. Customers
-  const rawCustomers = Array.isArray(data.customers) ? data.customers : [];
-  metrics.customers.sourceCount = rawCustomers.length;
-
-  // 5. Staff
-  const rawStaff = Array.isArray(data.staff) ? data.staff : [];
-  metrics.staff.sourceCount = rawStaff.length;
-
-  // 6. Orders
-  const rawOrders = Array.isArray(data.orders) ? data.orders : [];
-  metrics.orders.sourceCount = rawOrders.length;
-
-  // 7. Loads
-  const rawLoads = Array.isArray(data.loads) ? data.loads : [];
-  metrics.loads.sourceCount = rawLoads.length;
-  rawLoads.forEach((l: any) => {
-    sourceTotalQuarryRevenue += Number(l.quarryAmount || 0);
-  });
-
-  // 8. Gate Passes
-  const rawGatePasses = Array.isArray(data.gatePasses) ? data.gatePasses : [];
-  metrics.gatePasses.sourceCount = rawGatePasses.length;
-
-  // 9. Production
-  const rawProduction = Array.isArray(data.production) ? data.production : [];
-  metrics.production.sourceCount = rawProduction.length;
-
-  // 10. Expenses
-  const rawExpenses = Array.isArray(data.expenses) ? data.expenses : [];
-  metrics.expenses.sourceCount = rawExpenses.length;
-  rawExpenses.forEach((e: any) => {
-    sourceTotalExpenses += Number(e.amount || 0);
-  });
-
-  // 11. Payments
-  const rawPayments = Array.isArray(data.payments) ? data.payments : [];
-  metrics.payments.sourceCount = rawPayments.length;
-  rawPayments.forEach((p: any) => {
-    sourceTotalPayments += Number(p.amount || 0);
-  });
-
-  // 12. Income
-  const rawIncome = Array.isArray(data.income) ? data.income : [];
-  metrics.income.sourceCount = rawIncome.length;
-
-  console.log('Source Data Counts:');
-  console.table(
-    Object.entries(metrics).map(([entity, m]) => ({
-      Entity: entity,
-      'Source Count': m.sourceCount,
-    }))
-  );
-
-  console.log('\nSource Financial Totals:');
-  console.log(`- Quarry Revenue (Loads): ₹${sourceTotalQuarryRevenue.toLocaleString('en-IN')}`);
-  console.log(`- Expenses:               ₹${sourceTotalExpenses.toLocaleString('en-IN')}`);
-  console.log(`- Payments Received:      ₹${sourceTotalPayments.toLocaleString('en-IN')}`);
-
-  if (isDatabaseConfigured()) {
-    console.log('\nConnecting to PostgreSQL to perform migration...');
-    try {
-      // Begin transaction
-      await db.transaction(async (tx) => {
-        // Migrate Quarries
-        for (const q of rawQuarries) {
-          try {
-            await tx
-              .insert(schema.quarries)
-              .values({
-                id: q.id,
-                quarryCode: q.quarryCode || `RZ-Q${q.id}`,
-                quarryName: q.quarryName,
-                businessName: q.businessName || 'RZ Mining Ventures LLP',
-                address: q.address,
-                location: q.location,
-                phone: q.phone,
-                email: q.email,
-                owner: q.owner || 'RZ Ventures',
-                active: q.active ?? true,
-                notes: q.notes,
-              })
-              .onConflictDoNothing();
-            metrics.quarries.importedCount++;
-          } catch (e: any) {
-            metrics.quarries.failedCount++;
-          }
-        }
-
-        // Migrate Vehicles
-        for (const v of rawVehicles) {
-          try {
-            await tx
-              .insert(schema.vehicles)
-              .values({
-                id: v.id,
-                quarryId: v.quarryId || defaultQuarryId,
-                vehicleNumber: v.vehicleNumber,
-                owner: v.owner,
-                driver: v.driver,
-                phone: v.phone,
-                category: v.category || 'Outside Vehicle',
-                ownerType: v.ownerType || 'OUTSIDE',
-                tripRent: String(v.tripRent || 700),
-                capacity: v.capacity || 260,
-                status: v.status || 'Active',
-                active: v.active ?? true,
-                notes: v.remarks || v.notes,
-              })
-              .onConflictDoNothing();
-            metrics.vehicles.importedCount++;
-          } catch (e: any) {
-            metrics.vehicles.failedCount++;
-          }
-        }
-
-        // Migrate Loads
-        for (const l of rawLoads) {
-          try {
-            await tx
-              .insert(schema.loads)
-              .values({
-                id: l.id,
-                quarryId: l.quarryId || defaultQuarryId,
-                sectionId: l.sectionId,
-                loadNumber: l.loadNumber,
-                date: l.date,
-                time: l.time || '10:00 AM',
-                vehicleId: l.vehicleId,
-                vehicleNumber: l.vehicleNumber,
-                vehicleCategory: l.vehicleCategory || 'Outside',
-                driverId: l.driverId,
-                driverName: l.driver || l.driverName || 'Driver',
-                ownerName: l.owner || l.ownerName,
-                customerId: l.customerId,
-                customerName: l.customerName,
-                destination: l.destination,
-                material: l.material,
-                quantity: l.quantity || 260,
-                unit: l.unit || 'pcs',
-                capacity: l.capacity || 260,
-                freeQuantity: l.freeQuantity ?? 5,
-                ratedQuantity: l.ratedQuantity ?? 255,
-                actualLoadedQuantity: l.actualLoadedQuantity,
-                actualGateOutQuantity: l.actualGateOutQuantity,
-                billableQuantity: l.billableQuantity,
-                vehicleReceivedQuantity: l.vehicleReceivedQuantity,
-                rateCondition: l.rateCondition || 'Standard Rock',
-                gapPosition: l.gapPosition || 1,
-                roundNumber: l.roundNumber || 1,
-                isSpecialTradingLoad: l.isSpecialTradingLoad ?? false,
-                loadType: l.loadType || 'QUARRY_SALE',
-                loadingPaidByQuarry: l.loadingPaidByQuarry ?? false,
-                quarryRate: String(l.quarryRate || 43),
-                quarryAmount: String(l.quarryAmount || 10965),
-                customerSaleRate: String(l.customerSaleRate || 65),
-                customerSaleAmount: String(l.customerSaleAmount || 16900),
-                driverBatta: String(l.driverBatta || 0),
-                vehicleTripRent: String(l.vehicleTripRent || 0),
-                loadingCharge: String(l.loadingCharge || 0),
-                diesel: String(l.diesel || 0),
-                orderCommission: String(l.orderCommission || 0),
-                otherExpense: String(l.otherExpense || 0),
-                totalExpense: String(l.totalExpense || 0),
-                netProfit: String(l.netProfit || 0),
-                paymentReceived: String(l.paymentReceived || 0),
-                balance: String(l.balance || 0),
-                status: l.status || 'Loaded',
-                gatePassNumber: l.gatePassNumber,
-                enteredBy: l.enteredBy || 'Nafid',
-                remarks: l.remarks,
-              })
-              .onConflictDoNothing();
-            destTotalQuarryRevenue += Number(l.quarryAmount || 0);
-            metrics.loads.importedCount++;
-          } catch (e: any) {
-            metrics.loads.failedCount++;
-          }
-        }
-      });
-      console.log('✅ PostgreSQL transaction committed successfully!');
-    } catch (dbErr: any) {
-      console.error('❌ Database migration transaction failed:', dbErr.message);
+  await db.transaction(async (tx) => {
+    for (const q of data.quarries || []) {
+      try {
+        await tx.insert(schema.quarries).values({
+          id: String(q.id), quarryCode: String(q.quarryCode || `RZ-Q${q.id}`),
+          quarryName: String(q.quarryName || q.name || 'Quarry'),
+          businessName: String(q.businessName || 'RZ Mining Ventures LLP'),
+          address: q.address ?? null, location: q.location ?? null, phone: q.phone ?? null,
+          email: q.email ?? null, owner: q.owner ?? null, active: q.active ?? true, notes: q.notes ?? null,
+        }).onConflictDoNothing();
+        metrics.quarries.importedCount++;
+      } catch { metrics.quarries.failedCount++; }
     }
-  } else {
-    // Dry run: simulate 100% transformation verification
-    Object.keys(metrics).forEach((k) => {
-      metrics[k].importedCount = metrics[k].sourceCount;
-    });
-    destTotalQuarryRevenue = sourceTotalQuarryRevenue;
-    destTotalExpenses = sourceTotalExpenses;
-    destTotalPayments = sourceTotalPayments;
-  }
-
-  console.log('\n====================================================');
-  console.log('MIGRATION RECONCILIATION REPORT');
-  console.log('====================================================');
-  console.table(
-    Object.entries(metrics).map(([entity, m]) => ({
-      Entity: entity,
-      'Source Count': m.sourceCount,
-      Imported: m.importedCount,
-      Skipped: m.skippedCount,
-      Failed: m.failedCount,
-      Status: m.importedCount === m.sourceCount ? 'MATCHED' : 'VARIANCE',
-    }))
-  );
-
-  console.log('Financial Reconciliation:');
-  console.log(`- Quarry Revenue: Source ₹${sourceTotalQuarryRevenue} | Dest ₹${destTotalQuarryRevenue} [${sourceTotalQuarryRevenue === destTotalQuarryRevenue ? 'MATCH' : 'MISMATCH'}]`);
-  console.log(`- Expenses:       Source ₹${sourceTotalExpenses} | Dest ₹${destTotalExpenses} [${sourceTotalExpenses === destTotalExpenses ? 'MATCH' : 'MISMATCH'}]`);
-  console.log(`- Payments:       Source ₹${sourceTotalPayments} | Dest ₹${destTotalPayments} [${sourceTotalPayments === destTotalPayments ? 'MATCH' : 'MISMATCH'}]`);
-  console.log('====================================================\n');
-}
-
-runMigration()
-  .then(() => {
-    console.log('Migration script finished.');
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error('Unexpected migration error:', err);
-    process.exit(1);
+    for (const v of data.vehicles || []) {
+      try {
+        await tx.insert(schema.vehicles).values({
+          id: String(v.id), quarryId: String(v.quarryId || defaultQuarryId), vehicleNumber: String(v.vehicleNumber || v.number || v.id),
+          owner: v.owner ?? null, driver: v.driver ?? null, phone: v.phone ?? null,
+          category: String(v.category || 'Outside Vehicle'), ownerType: String(v.ownerType || 'OUTSIDE'),
+          tripRent: numeric(v.tripRent, 700), capacity: Number(v.capacity || 260),
+          status: String(v.status || 'Active'), active: v.active ?? true, notes: v.remarks ?? v.notes ?? null,
+        }).onConflictDoNothing();
+        metrics.vehicles.importedCount++;
+      } catch { metrics.vehicles.failedCount++; }
+    }
+    for (const l of data.loads || []) {
+      try {
+        await tx.insert(schema.loads).values({
+          id: String(l.id), quarryId: String(l.quarryId || defaultQuarryId), sectionId: l.sectionId ?? null,
+          loadNumber: String(l.loadNumber || l.id), date: String(l.date || new Date().toISOString().slice(0,10)),
+          time: String(l.time || '10:00'), vehicleId: l.vehicleId ?? null, vehicleNumber: String(l.vehicleNumber || ''),
+          vehicleCategory: String(l.vehicleCategory || 'Outside'), driverId: l.driverId ?? null,
+          driverName: String(l.driver || l.driverName || 'Driver'), ownerName: l.owner ?? l.ownerName ?? null,
+          customerId: l.customerId ?? null, customerName: String(l.customerName || ''),
+          destination: l.destination ?? null, material: String(l.material || '1st Quality'),
+          quantity: Number(l.quantity || 260), unit: String(l.unit || 'pcs'), capacity: Number(l.capacity || 260),
+          freeQuantity: Number(l.freeQuantity ?? 5), ratedQuantity: Number(l.ratedQuantity ?? 255),
+          actualLoadedQuantity: l.actualLoadedQuantity == null ? null : Number(l.actualLoadedQuantity),
+          actualGateOutQuantity: l.actualGateOutQuantity == null ? null : Number(l.actualGateOutQuantity),
+          billableQuantity: l.billableQuantity == null ? null : Number(l.billableQuantity),
+          vehicleReceivedQuantity: l.vehicleReceivedQuantity == null ? null : Number(l.vehicleReceivedQuantity),
+          rateCondition: String(l.rateCondition || 'Standard Rock'), gapPosition: Number(l.gapPosition || 1),
+          roundNumber: Number(l.roundNumber || 1), isSpecialTradingLoad: Boolean(l.isSpecialTradingLoad),
+          loadType: String(l.loadType || 'QUARRY_SALE'), loadingPaidByQuarry: Boolean(l.loadingPaidByQuarry),
+          quarryRate: numeric(l.quarryRate, 43), quarryAmount: numeric(l.quarryAmount),
+          customerSaleRate: numeric(l.customerSaleRate, 65), customerSaleAmount: numeric(l.customerSaleAmount),
+          driverBatta: numeric(l.driverBatta), vehicleTripRent: numeric(l.vehicleTripRent), loadingCharge: numeric(l.loadingCharge),
+          diesel: numeric(l.diesel), orderCommission: numeric(l.orderCommission), otherExpense: numeric(l.otherExpense),
+          totalExpense: numeric(l.totalExpense), netProfit: numeric(l.netProfit), paymentReceived: numeric(l.paymentReceived),
+          balance: numeric(l.balance), status: String(l.status || 'Loaded'), gatePassNumber: l.gatePassNumber ?? null,
+          enteredBy: String(l.enteredBy || 'Nafid'), remarks: l.remarks ?? null,
+        }).onConflictDoNothing();
+        metrics.loads.importedCount++;
+      } catch { metrics.loads.failedCount++; }
+    }
   });
+  console.log('Migration reconciliation report');
+  console.table(Object.entries(metrics).map(([entity, m]) => ({
+    entity, source: m.sourceCount, importedOrAlreadyPresent: m.importedCount,
+    skipped: m.skippedCount, failed: m.failedCount,
+    status: m.failedCount === 0 && m.importedCount === m.sourceCount ? 'CHECK COUNTS / VERIFIED' : 'VARIANCE',
+  })));
+  if (Object.values(metrics).some(m => m.failedCount > 0)) throw new Error('Migration had failed rows; investigate before cutover.');
+}
+runMigration().then(() => { console.log('Migration script finished.'); }).catch((err) => {
+  console.error('Migration failed:', err instanceof Error ? err.message : 'unknown error');
+  process.exitCode = 1;
+});
