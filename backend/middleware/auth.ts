@@ -21,6 +21,18 @@ declare global {
   }
 }
 
+function getAuthorizedUids(): string[] {
+  const raw = process.env.AUTHORIZED_FIREBASE_UIDS?.trim();
+  if (!raw) return [];
+  return [...new Set(raw.split(',').map((uid) => uid.trim()).filter(Boolean))];
+}
+
+function assertAuthorizationConfiguration(authorizedUids: string[]): void {
+  if (authorizedUids.length !== 2) {
+    throw new Error('AUTHORIZED_FIREBASE_UIDS must contain exactly 2 Firebase UIDs');
+  }
+}
+
 async function upsertUser(uid: string, email?: string, name?: string, photo?: string) {
   const values = {
     id: uid,
@@ -30,7 +42,7 @@ async function upsertUser(uid: string, email?: string, name?: string, photo?: st
     role: process.env.BOOTSTRAP_OWNER_UID === uid ? 'OWNER' : 'VIEWER',
     updated_at: new Date(),
   };
-  // Explicit, deployment-controlled bootstrap only; never accept a role from the client.
+
   const updates = {
     email: values.email,
     display_name: values.display_name,
@@ -53,7 +65,16 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   const token = header.replace(/^Bearer\s+/i, '').trim();
   try {
+    const authorizedUids = getAuthorizedUids();
+    assertAuthorizationConfiguration(authorizedUids);
+
     const decoded = await verifyIdToken(token);
+
+    // Authentication proves the Firebase identity; this allowlist controls application access.
+    if (!authorizedUids.includes(decoded.uid)) {
+      return res.status(403).json({ error: 'Forbidden: user is not authorized for this ERP' });
+    }
+
     await upsertUser(decoded.uid, decoded.email, decoded.name, decoded.picture);
 
     const [dbUser] = await db.select().from(users).where(eq(users.id, decoded.uid)).limit(1);
@@ -72,7 +93,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     };
     return next();
   } catch (error) {
-    // Configuration errors should fail closed without exposing credentials.
     console.error('[auth] Firebase token verification/provisioning failed');
     return res.status(401).json({ error: 'Invalid token or authentication service unavailable' });
   }
