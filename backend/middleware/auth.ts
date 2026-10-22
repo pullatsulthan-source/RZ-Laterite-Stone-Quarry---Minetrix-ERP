@@ -18,19 +18,30 @@ declare global {
   }
 }
 
+function configuredBootstrapRole(uid: string): 'OWNER' | 'ADMIN' | null {
+  if (process.env.BOOTSTRAP_OWNER_UID && process.env.BOOTSTRAP_OWNER_UID === uid) return 'OWNER';
+  if (process.env.BOOTSTRAP_ADMIN_UID && process.env.BOOTSTRAP_ADMIN_UID === uid) return 'ADMIN';
+  return null;
+}
+
 async function provisionUser(uid: string, email?: string, name?: string, photo?: string) {
   const { db } = await import('../db/connection');
   const { users } = await import('../db/schema');
-  const isBootstrapOwner = process.env.BOOTSTRAP_OWNER_UID === uid;
+  const bootstrapRole = configuredBootstrapRole(uid);
   const values = {
-    id: uid, email: email || '', display_name: name || null, photo_url: photo || null,
-    role: isBootstrapOwner ? 'OWNER' : 'VIEWER',
+    id: uid,
+    email: email || '',
+    display_name: name || null,
+    photo_url: photo || null,
+    role: bootstrapRole || 'VIEWER',
     updated_at: new Date(),
   };
   const updates = {
-    email: values.email, display_name: values.display_name, photo_url: values.photo_url,
+    email: values.email,
+    display_name: values.display_name,
+    photo_url: values.photo_url,
     updated_at: values.updated_at,
-    ...(isBootstrapOwner ? { role: 'OWNER' } : {}),
+    ...(bootstrapRole ? { role: bootstrapRole } : {}),
   };
   await db.insert(users).values(values).onConflictDoUpdate({ target: users.id, set: updates });
 }
