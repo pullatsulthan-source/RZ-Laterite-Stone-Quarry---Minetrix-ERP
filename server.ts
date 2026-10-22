@@ -51,7 +51,7 @@ function getInitialDatabase(): QuarryDatabase {
     vehicles: INITIAL_VEHICLES.map(v => ({ ...v, created_by_user_id: 'goog_nafid_rz', created_by_name: 'Nafid', created_by_email: 'nafidkhan@racezoneventures.com', created_at: v.createdAt || '2026-01-01T08:00:00Z' })),
     drivers: INITIAL_DRIVERS.map(v => ({ ...v, created_by_user_id: 'goog_nafid_rz', created_by_name: 'Nafid', created_by_email: 'nafidkhan@racezoneventures.com', created_at: v.createdAt || '2026-01-01T08:00:00Z' })),
     customers: INITIAL_CUSTOMERS.map(v => ({ ...v, created_by_user_id: 'goog_nafid_rz', created_by_name: 'Nafid', created_by_email: 'nafidkhan@racezoneventures.com', created_at: v.createdAt || '2026-01-01T08:00:00Z' })),
-    staff: INITIAL_STAFF.map(v => ({ ...v, created_by_user_id: 'goog_nafid_rz', created_by_name: 'Nafid', created_by_email: 'nafidkhan@racezoneventures.com', created_at: '2026-01-01T08:00:00Z' })),
+    staff: INITIAL_STAFF.map(v => ({ ...v, created_by_user_id: v.enteredBy === 'Nafid' ? 'goog_nafid_rz' : 'goog_aflah_rz', created_by_name: v.enteredBy, created_by_email: v.enteredBy === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com', created_at: '2026-01-01T08:00:00Z' })),
     attendance: INITIAL_ATTENDANCE.map(v => ({ ...v, created_by_user_id: v.enteredBy === 'Nafid' ? 'goog_nafid_rz' : 'goog_aflah_rz', created_by_name: v.enteredBy, created_by_email: v.enteredBy === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com', created_at: `${v.date}T08:00:00Z` })),
     advances: INITIAL_ADVANCES.map(v => ({ ...v, created_by_user_id: v.enteredBy === 'Nafid' ? 'goog_nafid_rz' : 'goog_aflah_rz', created_by_name: v.enteredBy, created_by_email: v.enteredBy === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com', created_at: v.createdAt || `${v.date}T08:00:00Z` })),
     payrolls: [], rates: INITIAL_RATES,
@@ -74,9 +74,7 @@ function writeLocalJson(database: QuarryDatabase) {
   fs.renameSync(tempFile, DB_FILE);
 }
 function loadDatabase(): QuarryDatabase {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Local JSON/demo database loading is disabled in production.');
-  }
+  if (process.env.NODE_ENV === 'production') throw new Error('Local JSON/demo database loading is disabled in production.');
   try {
     if (fs.existsSync(DB_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
@@ -87,9 +85,7 @@ function loadDatabase(): QuarryDatabase {
         theme: 'rz_gold', driverCollections: INITIAL_DRIVER_COLLECTIONS,
       };
       for (const [key, value] of Object.entries(defaults)) {
-        if (parsed[key] == null || (Array.isArray(value) && (!Array.isArray(parsed[key]) || parsed[key].length === 0))) {
-          parsed[key] = value; changed = true;
-        }
+        if (parsed[key] == null || (Array.isArray(value) && (!Array.isArray(parsed[key]) || parsed[key].length === 0))) { parsed[key] = value; changed = true; }
       }
       if (!parsed.activeQuarryId) { parsed.activeQuarryId = 'quarry-001'; changed = true; }
       for (const vehicle of parsed.vehicles || []) {
@@ -105,8 +101,7 @@ let db: QuarryDatabase = process.env.NODE_ENV === 'production' ? ({} as QuarryDa
 function saveDatabase(database: QuarryDatabase) {
   if (DB_ADAPTER === 'local-json') {
     if (process.env.NODE_ENV === 'production') throw new Error('DB_ADAPTER=local-json is not permitted in production.');
-    writeLocalJson(database);
-    return;
+    writeLocalJson(database); return;
   }
   if (!persistenceReady) throw new Error('Database is not initialized; refusing to write state.');
   const snapshot = JSON.parse(JSON.stringify(database)) as QuarryDatabase;
