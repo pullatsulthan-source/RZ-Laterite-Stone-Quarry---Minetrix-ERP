@@ -43,9 +43,7 @@ let pendingPersistence: Promise<void> = Promise.resolve();
 let persistenceFailure: unknown = null;
 
 function getInitialDatabase(): QuarryDatabase {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Demo seed data is disabled in production. Use a reviewed, data-specific bootstrap.');
-  }
+  if (process.env.NODE_ENV === 'production') throw new Error('Demo seed data is disabled in production.');
   return {
     rotations: INITIAL_ROTATIONS, vehicleTransactions: INITIAL_VEHICLE_TRANSACTIONS, orders: INITIAL_ORDERS,
     vehicles: INITIAL_VEHICLES.map(v => ({ ...v, created_by_user_id: 'goog_nafid_rz', created_by_name: 'Nafid', created_by_email: 'nafidkhan@racezoneventures.com', created_at: v.createdAt || '2026-01-01T08:00:00Z' })),
@@ -74,10 +72,11 @@ function writeLocalJson(database: QuarryDatabase) {
   fs.renameSync(tempFile, DB_FILE);
 }
 function loadDatabase(): QuarryDatabase {
-  if (process.env.NODE_ENV === 'production') throw new Error('Local JSON/demo database loading is disabled in production.');
+  if (process.env.NODE_ENV === 'production') throw new Error('Local JSON loading is disabled in production.');
   try {
     if (fs.existsSync(DB_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid local JSON database');
       let changed = false;
       const defaults: Record<string, unknown> = {
         rotations: INITIAL_ROTATIONS, vehicleTransactions: INITIAL_VEHICLE_TRANSACTIONS, orders: INITIAL_ORDERS,
@@ -101,7 +100,8 @@ let db: QuarryDatabase = process.env.NODE_ENV === 'production' ? ({} as QuarryDa
 function saveDatabase(database: QuarryDatabase) {
   if (DB_ADAPTER === 'local-json') {
     if (process.env.NODE_ENV === 'production') throw new Error('DB_ADAPTER=local-json is not permitted in production.');
-    writeLocalJson(database); return;
+    writeLocalJson(database);
+    return;
   }
   if (!persistenceReady) throw new Error('Database is not initialized; refusing to write state.');
   const snapshot = JSON.parse(JSON.stringify(database)) as QuarryDatabase;
@@ -120,7 +120,7 @@ async function initializePersistence() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required when DB_ADAPTER=postgres.');
   await verifyAppStateTable();
   const stored = await readAppState();
-  if (!stored) throw new Error("PostgreSQL app_state is empty. Apply migrations and run 'npm run db:seed' before starting.");
+  if (!stored) throw new Error("PostgreSQL app_state is empty. Apply migrations and seed reviewed production data before starting.");
   db = stored as unknown as QuarryDatabase; persistenceReady = true;
   console.log('[persistence] PostgreSQL app_state loaded and verified.');
 }
@@ -219,7 +219,7 @@ app.get('/api/state', (req: Request, res: Response) => {
   return res.json(user.role === 'OWNER' || user.role === 'ADMIN' ? db : scopeStateForUser(db as unknown as Record<string, unknown>, user, activeQuarry(user)));
 });
 function route(pathName: string, collection: keyof QuarryDatabase, validator?: any) {
-  app.get('/api/' + pathName, (_req: Request, res: Response) => res.json((db[collection] as any) || []);
+  app.get('/api/' + pathName, (_req: Request, res: Response) => res.json((db[collection] as any) || []));
   app.post('/api/' + pathName, (req: Request, res: Response) => {
     const parsed = validator ? validator.safeParse(req.body) : { success: true, data: req.body };
     if (!parsed.success) return res.status(422).json({ error: 'Invalid data', details: parsed.error.flatten() });
