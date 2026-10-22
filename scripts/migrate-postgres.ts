@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Idempotent SQL migration runner for the checked-in drizzle/*.sql files.
+ * Idempotent SQL migration runner for checked-in drizzle/*.sql files.
  * Requires DATABASE_URL; never falls back to a local or demo database.
  */
 import 'dotenv/config';
@@ -11,7 +11,7 @@ import pg from 'pg';
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl || !databaseUrl.startsWith('postgres')) {
+if (!databaseUrl || !/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
   console.error('[migrate] DATABASE_URL must point to PostgreSQL.');
   process.exit(1);
 }
