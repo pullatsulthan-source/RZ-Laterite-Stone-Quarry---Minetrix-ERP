@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { isAllowedFirebaseIdentity } from './auth-allowlist';
 
 export type AuthenticatedUser = {
   uid: string;
@@ -40,6 +41,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     const { verifyIdToken } = await import('../../src/auth/firebase-admin.ts');
     const decoded = await verifyIdToken(token);
+
+    // Deny unauthorized or unverified accounts BEFORE provisioning or querying ERP data.
+    if (!isAllowedFirebaseIdentity(decoded.email, decoded.email_verified)) {
+      return res.status(403).json({ error: 'This Google account is not authorized for RZ MINETRIX.' });
+    }
+
     await provisionUser(decoded.uid, decoded.email, decoded.name, decoded.picture);
     const { db } = await import('../db/connection');
     const { users, user_quarry_permissions } = await import('../db/schema');
