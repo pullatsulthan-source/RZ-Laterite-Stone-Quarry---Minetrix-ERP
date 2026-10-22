@@ -1,0 +1,85 @@
+name: RZ MINETRIX CI Failure Triage
+
+on:
+  workflow_run:
+    workflows:
+      - "RZ MINETRIX CI & Audit"
+      - "RZ MINETRIX Code Security Audit"
+    types:
+      - completed
+
+permissions:
+  actions: read
+  issues: write
+  contents: read
+
+jobs:
+  create-failure-report:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update failure report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const title = `CI failure: ${run.name} — run ${run.id}`;
+            const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: run.id,
+              per_page: 100
+            });
+            const failedJobs = jobsResponse.data.jobs.filter(job => job.conclusion === 'failure');
+            const details = failedJobs.map(job => {
+              const failedSteps = (job.steps || [])
+                .filter(step => step.conclusion === 'failure')
+                .map(step => `- ${step.name}`)
+                .join('\n');
+              return `### ${job.name}\n- Conclusion: ${job.conclusion}\n- Job URL: ${job.html_url}\n${failedSteps || '- Failed step details unavailable in API response.'}`;
+            }).join('\n\n') || 'GitHub reported a failed workflow, but failed-job details were not returned.';
+
+            const body = [
+              '## Automated CI failure report',
+              '',
+              `- Workflow: ${run.name}`,
+              `- Branch: ${run.head_branch}`,
+              `- Commit: ${run.head_sha}`,
+              `- Run: ${run.html_url}`,
+              `- Event: ${run.event}`,
+              '',
+              '## Failed jobs and steps',
+              '',
+              details,
+              '',
+              '## Required follow-up',
+              '- Reproduce the failure and inspect the full run logs.',
+              '- Fix on a feature branch and rerun CI.',
+              '- Do not merge or deploy solely because this issue was created.',
+              '- This report is diagnostic only; it does not claim a fix was applied.'
+            ].join('\n');
+
+            const openIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            const existing = openIssues.data.find(issue => issue.title === title && !issue.pull_request);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body
+              });
+              core.info(`Updated existing issue #${existing.number}`);
+            } else {
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body
+              });
+              core.info(`Created issue #${issue.data.number}`);
+            }

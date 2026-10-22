@@ -1,0 +1,142 @@
+name: Deploy RZ MINETRIX to Cloud Run
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: rz-minetrix-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, migrate, verify, deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Checkout the selected commit
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          BOOTSTRAP_OWNER_UID: ${{ vars.BOOTSTRAP_OWNER_UID }}
+          OWNER_BOOTSTRAP_COMPLETED: ${{ vars.OWNER_BOOTSTRAP_COMPLETED }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          for name in GCP_PROJECT_ID GCP_REGION CLOUD_SQL_INSTANCE FIREBASE_PROJECT_ID VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT; do
+            if [ -z "${!name:-}" ]; then echo "::error::Missing required GitHub variable/secret: $name"; exit 1; fi
+          done
+          if [ -z "${BOOTSTRAP_OWNER_UID:-}" ] && [ "${OWNER_BOOTSTRAP_COMPLETED:-}" != "true" ]; then
+            echo "::error::Set BOOTSTRAP_OWNER_UID for the first owner bootstrap, or set OWNER_BOOTSTRAP_COMPLETED=true after the owner role is verified."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud using Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Artifact Registry
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+        run: |
+          set -euo pipefail
+          gcloud config set project "$GCP_PROJECT_ID"
+          gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com sqladmin.googleapis.com
+          gcloud artifacts repositories describe rz-minetrix --location "$GCP_REGION" >/dev/null 2>&1 || \
+            gcloud artifacts repositories create rz-minetrix --repository-format=docker --location "$GCP_REGION" --description="RZ MINETRIX ERP container images"
+
+      - name: Build immutable image
+        id: build
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: |
+          set -euo pipefail
+          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/rz-minetrix/rz-minetrix-erp:$GITHUB_SHA"
+          gcloud builds submit . --region "$GCP_REGION" --config cloudbuild.yaml \
+            --substitutions="_IMAGE_URI=$IMAGE_URI,_VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY,_VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN,_VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID,_VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET,_VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID,_VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Apply database migrations
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+        run: |
+          set -euo pipefail
+          gcloud run jobs deploy rz-minetrix-migrate \
+            --image "$IMAGE_URI" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
+            --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
+            --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres" \
+            --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest" \
+            --set-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --command npm --args run,migrate --max-retries 0 --task-timeout 10m
+          gcloud run jobs execute rz-minetrix-migrate --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
+
+      - name: Verify production database is deliberately initialized
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+        run: |
+          set -euo pipefail
+          gcloud run jobs deploy rz-minetrix-bootstrap-check \
+            --image "$IMAGE_URI" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
+            --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
+            --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres" \
+            --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest" \
+            --set-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --command node --args scripts/check-production-bootstrap.js \
+            --max-retries 0 --task-timeout 5m
+          gcloud run jobs execute rz-minetrix-bootstrap-check --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --wait
+
+      - name: Deploy single-instance Cloud Run service
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          BOOTSTRAP_OWNER_UID: ${{ vars.BOOTSTRAP_OWNER_UID }}
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+        run: |
+          set -euo pipefail
+          gcloud run deploy rz-minetrix-erp \
+            --image "$IMAGE_URI" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
+            --platform managed --allow-unauthenticated \
+            --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
+            --add-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
+            --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres,FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,BOOTSTRAP_OWNER_UID=$BOOTSTRAP_OWNER_UID" \
+            --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest,FIREBASE_CLIENT_EMAIL=rz-minetrix-firebase-client-email:latest,FIREBASE_PRIVATE_KEY=rz-minetrix-firebase-private-key:latest" \
+            --concurrency 1 --max 1 --min 0 --timeout 300
+          gcloud run services describe rz-minetrix-erp --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)'

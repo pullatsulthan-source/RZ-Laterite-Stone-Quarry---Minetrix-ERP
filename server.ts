@@ -1,8 +1,14 @@
 import express, { Request, Response } from 'express';
+import { requireAuth, requireRole } from './backend/middleware/auth';
+import { canAccessQuarry, rowQuarryId, scopeStateForUser } from './backend/security/quarry-scope';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
+import { readAppState, writeAppState, verifyAppStateTable } from './backend/db/app-state';
+import { auditRequest } from './backend/audit/audit-logger';
+import { queryAuditLogs } from './backend/audit/audit-query';
 import {
   INITIAL_RATES,
   INITIAL_VEHICLES,
@@ -281,18 +287,105 @@ function loadDatabase(): QuarryDatabase {
   return freshDb;
 }
 
-function saveDatabase(db: QuarryDatabase) {
-  try {
-    const tempFile = `${DB_FILE}.tmp`;
-    fs.writeFileSync(tempFile, JSON.stringify(db, null, 2), 'utf-8');
-    fs.renameSync(tempFile, DB_FILE);
-  } catch (err) {
-    console.error('Failed to write database file:', err);
-  }
+const DB_ADAPTER = process.env.DB_ADAPTER || 'postgres';
+let persistenceReady = false;
+let pendingPersistence: Promise<void> = Promise.resolve();
+let persistenceFailure: unknown = null;
+
+function writeLocalJson(database: QuarryDatabase) {
+  const tempFile = `${DB_FILE}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(database, null, 2), 'utf-8');
+  fs.renameSync(tempFile, DB_FILE);
 }
 
-// In-memory cache synced with disk
+function saveDatabase(database: QuarryDatabase) {
+  if (DB_ADAPTER === 'local-json' || !persistenceReady) {
+    try {
+      writeLocalJson(database);
+    } catch (err) {
+      persistenceFailure = err;
+      console.error('Failed to write local JSON database:', err);
+    }
+    return;
+  }
+
+  // Serialize snapshots in request order so a later write cannot finish before an earlier write.
+  const snapshot = JSON.parse(JSON.stringify(database)) as QuarryDatabase;
+  pendingPersistence = pendingPersistence
+    .catch(() => undefined)
+    .then(() => writeAppState(snapshot))
+    .then(() => { persistenceFailure = null; })
+    .catch((err) => {
+      persistenceFailure = err;
+      console.error('[persistence] PostgreSQL write failed');
+      throw err;
+    });
+  // The API response middleware observes the failure and returns 503 rather than reporting success.
+  void pendingPersistence.catch(() => undefined);
+}
+
+async function initializePersistence() {
+  if (DB_ADAPTER === 'local-json') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('DB_ADAPTER=local-json is not permitted in production.');
+    }
+    persistenceReady = true;
+    console.warn('[persistence] Explicit local JSON adapter enabled; not suitable for multi-instance production.');
+    return;
+  }
+  if (DB_ADAPTER !== 'postgres') throw new Error('DB_ADAPTER must be postgres or local-json.');
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required when DB_ADAPTER=postgres.');
+  await verifyAppStateTable();
+  const storedState = await readAppState();
+  if (storedState) {
+    db = storedState as unknown as QuarryDatabase;
+  } else {
+    throw new Error("PostgreSQL app_state is empty. Apply migrations and run 'npm run db:seed' before starting the API.");
+  }
+  persistenceReady = true;
+  console.log('[persistence] PostgreSQL app_state loaded and verified.');
+}
+
+// In-memory cache initialized from local JSON; PostgreSQL replaces it before the server listens.
 let db: QuarryDatabase = loadDatabase();
+
+
+// Ensure successful API responses are not sent until queued PostgreSQL writes finish.
+app.use((req: Request, res: Response, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => {
+    if (DB_ADAPTER !== 'postgres' || !req.path.startsWith('/api') || res.statusCode >= 400) {
+      return originalJson(body);
+    }
+    const queuedWrite = pendingPersistence;
+    void queuedWrite.then(() => {
+      if (persistenceFailure) {
+        if (!res.headersSent) { res.status(503); originalJson({ error: 'Database persistence failed; request was not confirmed.' }); }
+        return;
+      }
+      if (!res.headersSent) originalJson(body);
+    }).catch(() => {
+      if (!res.headersSent) { res.status(503); originalJson({ error: 'Database persistence failed; request was not confirmed.' }); }
+    });
+    return res;
+  }) as Response['json'];
+  next();
+});
+
+// Request audit runs before authentication so denied/invalid API attempts are also recorded.
+// Firebase authentication is enforced for every API except the public health check.
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', apiLimiter);
+app.use('/api', auditRequest);
+app.use('/api', (req: Request, res: Response, next) => {
+  if (req.path === '/health') return next();
+  return requireAuth(req, res, next);
+});
 
 // ----------------- API ROUTES -----------------
 
@@ -301,6 +394,50 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// Audit trail is restricted to OWNER/ADMIN. The endpoint is excluded from request logging to avoid recursion.
+app.get('/api/audit-logs', requireRole(['OWNER', 'ADMIN']), async (req: Request, res: Response) => {
+  const parseDate = (value: unknown): string | undefined => {
+    if (typeof value !== 'string' || !value.trim()) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  };
+  const rawLimit = Number(req.query.limit ?? 50);
+  const rawOffset = Number(req.query.offset ?? 0);
+  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, Math.trunc(rawLimit))) : 50;
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.trunc(rawOffset)) : 0;
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+  if ((req.query.from && !from) || (req.query.to && !to)) {
+    return res.status(400).json({ error: 'from/to must be valid date-time values' });
+  }
+  try {
+    const result = await queryAuditLogs({
+      limit,
+      offset,
+      userId: typeof req.query.userId === 'string' ? req.query.userId.slice(0, 128) : undefined,
+      action: typeof req.query.action === 'string' ? req.query.action.slice(0, 128) : undefined,
+      quarryId: typeof req.query.quarryId === 'string' ? req.query.quarryId.slice(0, 64) : undefined,
+      from,
+      to,
+    });
+    return res.json(result);
+  } catch {
+    console.error('[audit] Failed to query audit logs');
+    return res.status(500).json({ error: 'Unable to retrieve audit logs' });
+  }
+});
+
+
+
+
+
+// Return only the server-verified identity and effective permissions.
+// Firebase client sign-in alone does not grant ERP access.
+app.get('/api/auth/session', (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  return res.json({
+    authenticated: true,
 // Production PostgreSQL + Drizzle Database Status Endpoint
 app.get('/api/db/status', async (req: Request, res: Response) => {
   const configured = isDatabaseConfigured();
@@ -341,21 +478,230 @@ app.post('/api/auth/verify', (req: Request, res: Response) => {
   res.json({
     authorized: true,
     user: {
-      id: isAflah ? 'op_aflah_rz' : 'op_nafid_rz',
-      email: isAflah ? 'aflah@racezoneventures.com' : 'nafidkhan@racezoneventures.com',
-      name: name || (isAflah ? 'Aflah RZ' : 'Nafid Khan'),
-      shortName,
-      picture: isAflah
-        ? 'https://ui-avatars.com/api/?name=Aflah+RZ&background=d4af37&color=090a0d&bold=true'
-        : 'https://ui-avatars.com/api/?name=Nafid+Khan&background=d4af37&color=090a0d&bold=true',
-      verifiedAt: new Date().toISOString(),
+      uid: user.uid,
+      email: user.email,
+      name: user.name,
+      picture: user.picture || null,
+      role: user.role,
+      quarryIds: user.quarryIds,
     },
   });
 });
 
-// Full state endpoint for multi-device synchronization
+// Fail closed: all ERP APIs require a verified Firebase ID token.
+// Health remains public so deployment health checks can run without credentials.
+
+// Central server-side role policy. Reads remain authenticated; sensitive writes are role-restricted.
+app.use('/api', (req: Request, res: Response, next) => {
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const role = user.role.toUpperCase();
+  const method = req.method.toUpperCase();
+  const pathName = req.path.toLowerCase();
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+
+  if (role === 'VIEWER' && isMutation) {
+    return res.status(403).json({ error: 'Viewer accounts are read-only' });
+  }
+
+  const financialPath = /^\/(income|expenses|payments|statements|ledger)(\/|$)/.test(pathName);
+  if (financialPath && isMutation && !['OWNER', 'ADMIN', 'ACCOUNTS'].includes(role)) {
+    return res.status(403).json({ error: 'Financial mutation requires OWNER, ADMIN, or ACCOUNTS' });
+  }
+
+  const hrPath = /^\/(staff|attendance|advances|payrolls)(\/|$)/.test(pathName);
+  if (hrPath && isMutation && !['OWNER', 'ADMIN', 'HR'].includes(role)) {
+    return res.status(403).json({ error: 'HR mutation requires OWNER, ADMIN, or HR' });
+  }
+
+  // Rates are still stored globally in the legacy JSON store. Until rates are
+  // persisted per quarry, only global administrators may read or mutate them.
+  if (pathName === '/rates' && isMutation && !['OWNER', 'ADMIN'].includes(role)) {
+    return res.status(403).json({ error: 'Global rates require OWNER or ADMIN until per-quarry rate storage is enabled' });
+  }
+
+  const adminConfigPath = /^\/(quarries|branding|billing-config|rates)(\/|$)/.test(pathName);
+  if (adminConfigPath && isMutation && !['OWNER', 'ADMIN'].includes(role)) {
+    return res.status(403).json({ error: 'Configuration changes require OWNER or ADMIN' });
+  }
+
+  if (pathName === '/active-quarry' && isMutation) {
+    const requested = req.body?.activeQuarryId;
+    if (requested == null || typeof requested !== 'string' || !requested.trim()) {
+      return res.status(422).json({ error: 'activeQuarryId is required' });
+    }
+    if (!canAccessQuarry(user, requested.trim())) {
+      return res.status(403).json({ error: 'No access to the requested quarry' });
+    }
+  }
+
+  return next();
+});
+
+// Enforce quarry isolation for legacy JSON-backed endpoints until PostgreSQL cutover.
+// This middleware is intentionally fail-closed for non-admin users: records without a quarry
+// cannot be safely exposed or mutated by a quarry-scoped account.
+const API_COLLECTIONS: Record<string, string> = {
+  loads: 'loads',
+  'gate-passes': 'gatePasses',
+  production: 'production',
+  'stock-adjustments': 'stockAdjustments',
+  income: 'income',
+  expenses: 'expenses',
+  payments: 'payments',
+  statements: 'statements',
+  vehicles: 'vehicles',
+  drivers: 'drivers',
+  customers: 'customers',
+  staff: 'staff',
+  attendance: 'attendance',
+  advances: 'advances',
+  payrolls: 'payrolls',
+  rotations: 'rotations',
+  'vehicle-transactions': 'vehicleTransactions',
+  orders: 'orders',
+  quarries: 'quarries',
+  'driver-collections': 'driverCollections',
+};
+
+
+
+// Active quarry selection is user-scoped. A shared database field caused one user's
+// selection to change the default quarry seen by every other signed-in user.
+const activeQuarryByUser = new Map<string, string>();
+function getUserActiveQuarry(user: any): string {
+  const assigned = Array.isArray(user?.quarryIds) ? user.quarryIds.map(String) : [];
+  const selected = user?.uid ? activeQuarryByUser.get(String(user.uid)) : undefined;
+  if (selected && canAccessQuarry(user, selected)) return selected;
+  if (assigned.length > 0) return assigned[0];
+  return '';
+}
+
+app.use('/api', (req: Request, res: Response, next) => {
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const role = String(user.role || 'VIEWER').toUpperCase();
+  const method = req.method.toUpperCase();
+  const pathName = req.path.toLowerCase();
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const segments = pathName.split('/').filter(Boolean);
+  const resource = segments[0] || '';
+  const collectionKey = API_COLLECTIONS[resource];
+  const isAdmin = role === 'OWNER' || role === 'ADMIN';
+
+  // Whole-database import/reset and global state replacement must remain admin-only.
+  if (isMutation && ['/reset', '/import', '/state'].includes(pathName) && !isAdmin) {
+    return res.status(403).json({ error: 'Global data operations require OWNER or ADMIN' });
+  }
+
+  // Global configuration is deliberately withheld from quarry-scoped users until it is stored per quarry.
+  if (!isMutation && ['/branding', '/billing-config'].includes(pathName) && !isAdmin) {
+    return res.status(403).json({ error: 'Configuration is not available to quarry-scoped users' });
+  }
+
+  if (isAdmin) return next();
+
+  // Fail closed for any API resource that has not been explicitly mapped to a
+  // quarry scope. These legacy/global endpoints have their own guards below or
+  // in their handlers; new endpoints must be added deliberately.
+  const explicitlyHandledUnscopedPaths = new Set([
+    '/state', '/auth/session', '/active-quarry', '/branding', '/billing-config', '/rates', '/reset', '/import',
+  ]);
+  if (!collectionKey) {
+    if (explicitlyHandledUnscopedPaths.has(pathName)) return next();
+    return res.status(403).json({ error: 'Quarry scope is not configured for this endpoint' });
+  }
+
+  const rows = (db as any)[collectionKey];
+  if (!Array.isArray(rows)) {
+    return res.status(403).json({ error: 'Quarry-scoped access is unavailable for this resource' });
+  }
+
+  if (isMutation) {
+    if (method === 'POST') {
+      // Payroll creation wraps its rows in { month, payrolls: [...] }; scope every
+      // persisted row, not merely the request envelope.
+      const nestedRows = resource === 'payrolls' && !Array.isArray(req.body) && Array.isArray(req.body?.payrolls)
+        ? req.body.payrolls
+        : null;
+      const incoming = Array.isArray(req.body) ? req.body : (nestedRows || [req.body]);
+      const defaultQuarryId = user.quarryIds.length === 1 ? user.quarryIds[0] : null;
+      for (const row of incoming) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+          return res.status(422).json({ error: 'Invalid resource payload' });
+        }
+        const requestedId = row.quarryId ?? row.quarry_id ?? req.body?.quarryId ?? req.body?.quarry_id ?? defaultQuarryId;
+        if (requestedId == null) {
+          return res.status(422).json({ error: 'quarryId is required when multiple quarries are assigned' });
+        }
+        if (!canAccessQuarry(user, String(requestedId))) {
+          return res.status(403).json({ error: 'Forbidden: no access to requested quarry' });
+        }
+        row.quarryId = String(requestedId);
+      }
+      if (nestedRows && req.body && typeof req.body === 'object') {
+        const envelopeQuarryId = req.body.quarryId ?? req.body.quarry_id ?? defaultQuarryId;
+        if (envelopeQuarryId != null) req.body.quarryId = String(envelopeQuarryId);
+      }
+      return next();
+    }
+
+    const id = req.params.id || segments[1];
+    if (!id) return res.status(403).json({ error: 'Quarry-scoped mutation is not supported for this route' });
+    const existing = rows.find((row: any) => String(row?.id) === String(id));
+    if (!existing) return res.status(404).json({ error: 'Resource not found' });
+    const existingQuarryId = rowQuarryId(existing);
+    if (!existingQuarryId || !canAccessQuarry(user, existingQuarryId)) {
+      return res.status(403).json({ error: 'Forbidden: resource is outside your quarry' });
+    }
+    const requestedQuarryId = req.body?.quarryId ?? req.body?.quarry_id;
+    if (requestedQuarryId != null && !canAccessQuarry(user, String(requestedQuarryId))) {
+      return res.status(403).json({ error: 'Forbidden: cannot move resource to another quarry' });
+    }
+    return next();
+  }
+
+  // Scope collection reads and prevent direct access to records belonging to another quarry.
+  const originalJson = res.json.bind(res);
+  res.json = ((payload: any) => {
+    if (Array.isArray(payload)) {
+      return originalJson(payload.filter((row: any) => {
+        // Quarry records are scoped by their own primary key, not a quarryId field.
+        if (collectionKey === 'quarries') {
+          return typeof row?.id === 'string' && canAccessQuarry(user, String(row.id));
+        }
+        const quarryId = rowQuarryId(row);
+        return quarryId !== null && canAccessQuarry(user, quarryId);
+      }));
+    }
+    if (payload && typeof payload === 'object' && !('success' in payload) && !('error' in payload)) {
+      const quarryId = collectionKey === 'quarries' && payload.id != null
+        ? String(payload.id)
+        : rowQuarryId(payload);
+      if (quarryId === null && segments.length > 1) {
+        return res.status(403).json({ error: 'Forbidden: record has no verified quarry scope' });
+      }
+      if (quarryId !== null && !canAccessQuarry(user, quarryId)) {
+        return res.status(403).json({ error: 'Forbidden: resource is outside your quarry' });
+      }
+    }
+    return originalJson(payload);
+  }) as typeof res.json;
+
+  return next();
+});
+
+// State is protected and scoped to the authenticated user's server-side quarry memberships.
 app.get('/api/state', (req: Request, res: Response) => {
-  res.json(db);
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  if (user.role === 'OWNER' || user.role === 'ADMIN') return res.json(db);
+
+  return res.json(scopeStateForUser(
+    db as unknown as Record<string, unknown>,
+    user,
+    getUserActiveQuarry(user),
+  ));
 });
 
 // --- ENTITY MUTATION ENDPOINTS ---
@@ -824,12 +1170,18 @@ app.delete('/api/quarries/:id', (req: Request, res: Response) => {
 });
 
 app.post('/api/active-quarry', (req: Request, res: Response) => {
-  const { activeQuarryId } = req.body;
-  if (activeQuarryId) {
-    db.activeQuarryId = activeQuarryId;
-    saveDatabase(db);
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const requested = req.body?.activeQuarryId;
+  if (typeof requested !== 'string' || !requested.trim()) {
+    return res.status(422).json({ error: 'activeQuarryId is required' });
   }
-  res.json({ success: true, activeQuarryId: db.activeQuarryId });
+  const activeQuarryId = requested.trim();
+  if (!canAccessQuarry(user, activeQuarryId)) {
+    return res.status(403).json({ error: 'Forbidden: no access to the requested quarry' });
+  }
+  if (user.uid) activeQuarryByUser.set(String(user.uid), activeQuarryId);
+  return res.json({ success: true, activeQuarryId });
 });
 
 // Branding Config
@@ -888,6 +1240,16 @@ app.delete('/api/driver-collections/:id', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
+// Database Full Backup / Reset
+app.post('/api/reset', requireRole('OWNER'), (req: Request, res: Response) => {
+  if (process.env.ENABLE_RESET !== 'true') {
+    return res.status(403).json({ error: 'Reset is disabled. Set ENABLE_RESET=true deliberately to enable it.' });
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Reset is disabled in production.' });
+  }
+  if (req.headers['x-confirm-reset'] !== 'CONFIRM_RESET') {
+    return res.status(400).json({ error: 'Confirmation required: set X-Confirm-Reset: CONFIRM_RESET' });
 // Database Full Backup / Reset with Production Safety
 app.post('/api/reset', (req: Request, res: Response) => {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -902,6 +1264,9 @@ app.post('/api/reset', (req: Request, res: Response) => {
   res.json({ success: true, message: 'Database reset to initial operational state.' });
 });
 
+app.post('/api/import', requireRole(['OWNER', 'ADMIN']), (req: Request, res: Response) => {
+  if (req.headers['x-confirm-import'] !== 'CONFIRM_IMPORT') {
+    return res.status(400).json({ error: 'Confirmation required: set X-Confirm-Import: CONFIRM_IMPORT' });
 app.post('/api/import', (req: Request, res: Response) => {
   const isProduction = process.env.NODE_ENV === 'production';
   const confirmHeader = req.headers['x-admin-confirm'];
@@ -926,6 +1291,7 @@ app.post('/api/import', (req: Request, res: Response) => {
 
 // ----------------- VITE SPA / STATIC HANDLER -----------------
 async function startServer() {
+  await initializePersistence();
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -944,4 +1310,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error('[startup] Server initialization failed:', error instanceof Error ? error.message : 'unknown error');
+  process.exitCode = 1;
+});
