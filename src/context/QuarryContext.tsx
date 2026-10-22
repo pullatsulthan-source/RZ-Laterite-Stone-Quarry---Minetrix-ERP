@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import { firebaseAuth } from '../auth/firebase-client';
 import {
   AppUser,
   Vehicle,
@@ -334,159 +336,187 @@ interface QuarryContextType {
 const QuarryContext = createContext<QuarryContextType | null>(null);
 
 const STORAGE_KEY = 'rz_minetrix_quarry_cache_v2';
+const IS_PRODUCTION_CLIENT = import.meta.env.PROD;
+
+// Production must never read or write old browser cache: it may contain demo/test records.
+function getCachedItem(key: string): string | null {
+  if (IS_PRODUCTION_CLIENT) return null;
+  try { return window.getCachedItem(key); } catch { return null; }
+}
+function setCachedItem(key: string, value: string): void {
+  if (IS_PRODUCTION_CLIENT) return;
+  try { window.setCachedItem(key, value); } catch { /* Cache is optional in development. */ }
+}
+function removeCachedItem(key: string): void {
+  if (IS_PRODUCTION_CLIENT) return;
+  try { window.removeCachedItem(key); } catch { /* Cache is optional in development. */ }
+}
+function productionSafeInitial<T>(seed: T): T {
+  if (IS_PRODUCTION_CLIENT && Array.isArray(seed)) return [] as T;
+  return seed;
+}
+const EMPTY_QUARRY: QuarryProfile = {
+  id: '', quarryCode: '', quarryName: '', businessName: '', address: '', location: '',
+  phone: '', email: '', owner: '', active: false, sections: [],
+};
 
 export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Direct active operator between the 2 internal quarry operators (Nafid & Aflah)
   const [currentUser, setCurrentUserState] = useState<AppUser>(() => {
-    const saved = localStorage.getItem('rz_active_operator');
+    const saved = getCachedItem('rz_active_operator');
     return saved === 'Aflah' ? 'Aflah' : 'Nafid';
   });
 
   const setCurrentUser = useCallback((user: AppUser) => {
     setCurrentUserState(user);
-    localStorage.setItem('rz_active_operator', user);
+    setCachedItem('rz_active_operator', user);
   }, []);
 
-  const authUser: GoogleAuthUser = useMemo(() => ({
-    id: currentUser === 'Nafid' ? 'op_nafid_rz' : 'op_aflah_rz',
-    name: currentUser === 'Nafid' ? 'Nafid Khan' : 'Aflah RZ',
-    shortName: currentUser,
-    email: currentUser === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com',
-    picture:
-      currentUser === 'Nafid'
-        ? 'https://ui-avatars.com/api/?name=Nafid+Khan&background=d4af37&color=090a0d&bold=true'
-        : 'https://ui-avatars.com/api/?name=Aflah+RZ&background=d4af37&color=090a0d&bold=true',
-    verifiedAt: new Date().toISOString(),
-  }), [currentUser]);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(firebaseAuth.currentUser);
+  useEffect(() => onAuthStateChanged(firebaseAuth, setFirebaseUser), []);
+  const authUser: GoogleAuthUser | null = useMemo(() => {
+    if (!firebaseUser) return null;
+    const email = firebaseUser.email || '';
+    const isAflah = email.toLowerCase() === 'aflah@racezoneventures.com';
+    const displayName = firebaseUser.displayName || email.split('@')[0] || 'Authorized User';
+    return {
+      id: firebaseUser.uid,
+      name: displayName,
+      shortName: isAflah ? 'Aflah' : 'Nafid',
+      email,
+      picture: firebaseUser.photoURL || undefined,
+      verifiedAt: new Date().toISOString(),
+    };
+  }, [firebaseUser]);
 
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Initial local state initialized from localStorage cache or seed
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_vehicles`);
-    return saved ? JSON.parse(saved) : INITIAL_VEHICLES;
+    const saved = getCachedItem(`${STORAGE_KEY}_vehicles`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_VEHICLES);
   });
 
   const [drivers, setDrivers] = useState<Driver[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_drivers`);
-    return saved ? JSON.parse(saved) : INITIAL_DRIVERS;
+    const saved = getCachedItem(`${STORAGE_KEY}_drivers`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_DRIVERS);
   });
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_customers`);
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
+    const saved = getCachedItem(`${STORAGE_KEY}_customers`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_CUSTOMERS);
   });
 
   const [staff, setStaff] = useState<Staff[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_staff`);
-    return saved ? JSON.parse(saved) : INITIAL_STAFF;
+    const saved = getCachedItem(`${STORAGE_KEY}_staff`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_STAFF);
   });
 
   const [attendance, setAttendance] = useState<StaffAttendance[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_attendance`);
-    return saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
+    const saved = getCachedItem(`${STORAGE_KEY}_attendance`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_ATTENDANCE);
   });
 
   const [advances, setAdvances] = useState<StaffAdvance[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_advances`);
-    return saved ? JSON.parse(saved) : INITIAL_ADVANCES;
+    const saved = getCachedItem(`${STORAGE_KEY}_advances`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_ADVANCES);
   });
 
   const [payrolls, setPayrolls] = useState<StaffPayroll[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_payrolls`);
-    return saved ? JSON.parse(saved) : [];
+    const saved = getCachedItem(`${STORAGE_KEY}_payrolls`);
+    return saved ? JSON.parse(saved) : productionSafeInitial([]);
   });
 
   const [rates, setRates] = useState<RateConfig>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_rates`);
-    return saved ? JSON.parse(saved) : INITIAL_RATES;
+    const saved = getCachedItem(`${STORAGE_KEY}_rates`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_RATES);
   });
 
   const [loads, setLoads] = useState<LoadOrder[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_loads`);
-    return saved ? JSON.parse(saved) : INITIAL_LOADS;
+    const saved = getCachedItem(`${STORAGE_KEY}_loads`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_LOADS);
   });
 
   const [gatePasses, setGatePasses] = useState<GatePass[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_gate_passes`);
-    return saved ? JSON.parse(saved) : INITIAL_GATE_PASSES;
+    const saved = getCachedItem(`${STORAGE_KEY}_gate_passes`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_GATE_PASSES);
   });
 
   const [production, setProduction] = useState<ProductionEntry[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_production`);
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTION;
+    const saved = getCachedItem(`${STORAGE_KEY}_production`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_PRODUCTION);
   });
 
   const [stockAdjustments, setStockAdjustments] = useState<StockAdjustment[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_stock_adjustments`);
-    return saved ? JSON.parse(saved) : [];
+    const saved = getCachedItem(`${STORAGE_KEY}_stock_adjustments`);
+    return saved ? JSON.parse(saved) : productionSafeInitial([]);
   });
 
   const [income, setIncome] = useState<QuarryIncome[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_income`);
-    return saved ? JSON.parse(saved) : INITIAL_INCOME;
+    const saved = getCachedItem(`${STORAGE_KEY}_income`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_INCOME);
   });
 
   const [expenses, setExpenses] = useState<QuarryExpense[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_expenses`);
-    return saved ? JSON.parse(saved) : INITIAL_EXPENSES;
+    const saved = getCachedItem(`${STORAGE_KEY}_expenses`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_EXPENSES);
   });
 
   const [payments, setPayments] = useState<CustomerPayment[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_payments`);
-    return saved ? JSON.parse(saved) : INITIAL_PAYMENTS;
+    const saved = getCachedItem(`${STORAGE_KEY}_payments`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_PAYMENTS);
   });
 
   const [statements, setStatements] = useState<SavedStatement[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_statements`);
-    return saved ? JSON.parse(saved) : (INITIAL_STATEMENTS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_statements`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_STATEMENTS || []));
   });
 
   const [rotations, setRotations] = useState<DailyRotation[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_rotations`);
-    return saved ? JSON.parse(saved) : INITIAL_ROTATIONS;
+    const saved = getCachedItem(`${STORAGE_KEY}_rotations`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_ROTATIONS);
   });
 
   const [vehicleTransactions, setVehicleTransactions] = useState<VehicleTransaction[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_vehicle_transactions`);
-    return saved ? JSON.parse(saved) : (INITIAL_VEHICLE_TRANSACTIONS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_vehicle_transactions`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_VEHICLE_TRANSACTIONS || []));
   });
 
   const [orders, setOrders] = useState<StoneOrder[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_orders`);
-    return saved ? JSON.parse(saved) : (INITIAL_ORDERS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_orders`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_ORDERS || []));
   });
 
   // Multi-Quarry & Business Profile state
   const [quarries, setQuarries] = useState<QuarryProfile[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_quarries`);
-    return saved ? JSON.parse(saved) : (INITIAL_QUARRIES || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_quarries`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_QUARRIES || []));
   });
 
   const [activeQuarryId, setActiveQuarryIdState] = useState<string>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_active_quarry_id`);
-    return saved || 'quarry-001';
+    const saved = getCachedItem(`${STORAGE_KEY}_active_quarry_id`);
+    return saved || (IS_PRODUCTION_CLIENT ? '' : 'quarry-001');
   });
 
   const activeQuarry = useMemo(() => {
-    return quarries.find((q) => q.id === activeQuarryId) || quarries[0] || INITIAL_QUARRIES[0];
+    return quarries.find((q) => q.id === activeQuarryId) || quarries[0] || (IS_PRODUCTION_CLIENT ? EMPTY_QUARRY : INITIAL_QUARRIES[0]);
   }, [quarries, activeQuarryId]);
 
   // Branding & Asset Config state
   const [branding, setBranding] = useState<BrandingConfig>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_branding`);
-    return saved ? JSON.parse(saved) : INITIAL_BRANDING;
+    const saved = getCachedItem(`${STORAGE_KEY}_branding`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_BRANDING);
   });
 
   // Billing Config state
   const [billingConfig, setBillingConfig] = useState<BillingConfig>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_billing_config`);
-    return saved ? JSON.parse(saved) : INITIAL_BILLING_CONFIG;
+    const saved = getCachedItem(`${STORAGE_KEY}_billing_config`);
+    return saved ? JSON.parse(saved) : productionSafeInitial(INITIAL_BILLING_CONFIG);
   });
 
   // Theme state
   const [theme, setThemeState] = useState<AppTheme>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_theme`);
+    const saved = getCachedItem(`${STORAGE_KEY}_theme`);
     return (saved as AppTheme) || 'rz_gold';
   });
 
@@ -496,150 +526,151 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Driver Collections (UNSETTLED DRIVER COLLECTION → Company Settlement)
   const [driverCollections, setDriverCollections] = useState<DriverCollection[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_driver_collections`);
-    return saved ? JSON.parse(saved) : (INITIAL_DRIVER_COLLECTIONS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_driver_collections`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_DRIVER_COLLECTIONS || []));
   });
 
   // Daily Production Records (Zero Warehouse Stock Model)
   const [dailyProductionRecords, setDailyProductionRecords] = useState<QuarryDailyProductionRecord[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_daily_production_records`);
-    return saved ? JSON.parse(saved) : (INITIAL_DAILY_PRODUCTION_RECORDS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_daily_production_records`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_DAILY_PRODUCTION_RECORDS || []));
   });
 
   // Daily Gap System (4-Gap queue)
   const [gapQueue, setGapQueue] = useState<GapVehicleQueueItem[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_gap_queue`);
-    return saved ? JSON.parse(saved) : (INITIAL_GAP_QUEUE || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_gap_queue`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_GAP_QUEUE || []));
   });
 
   // Gap Offer Events (Cascading Offers)
   const [gapOfferEvents, setGapOfferEvents] = useState<GapOfferEvent[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_gap_offer_events`);
-    return saved ? JSON.parse(saved) : (INITIAL_GAP_OFFER_EVENTS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_gap_offer_events`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_GAP_OFFER_EVENTS || []));
   });
 
   // Quarry Round Logs
   const [roundLogs, setRoundLogs] = useState<QuarryRoundLog[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_round_logs`);
-    return saved ? JSON.parse(saved) : (INITIAL_ROUND_LOGS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_round_logs`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_ROUND_LOGS || []));
   });
 
   // Prompt 3: Machinery Master State
   const [machines, setMachines] = useState<QuarryMachine[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_machines`);
-    return saved ? JSON.parse(saved) : (INITIAL_MACHINES || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_machines`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_MACHINES || []));
   });
 
   // JCB Usage & Hour Readings State
   const [jcbRecords, setJcbRecords] = useState<JcbUsageRecord[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_jcb_records`);
-    return saved ? JSON.parse(saved) : (INITIAL_JCB_RECORDS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_jcb_records`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_JCB_RECORDS || []));
   });
 
   // Machine Rent Contracts State
   const [rentContracts, setRentContracts] = useState<MachineRentContract[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_rent_contracts`);
-    return saved ? JSON.parse(saved) : (INITIAL_RENT_CONTRACTS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_rent_contracts`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_RENT_CONTRACTS || []));
   });
 
   // Vendor / Shop Master State
   const [vendors, setVendors] = useState<VendorShop[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_vendors`);
-    return saved ? JSON.parse(saved) : (INITIAL_VENDORS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_vendors`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_VENDORS || []));
   });
 
   // Diesel Entries State (Machine vs Vehicle vs JCB Reimbursed)
   const [dieselEntries, setDieselEntries] = useState<DieselEntry[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_diesel_entries`);
-    return saved ? JSON.parse(saved) : (INITIAL_DIESEL_ENTRIES || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_diesel_entries`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_DIESEL_ENTRIES || []));
   });
 
   // Oil Entries State
   const [oilEntries, setOilEntries] = useState<OilEntry[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_oil_entries`);
-    return saved ? JSON.parse(saved) : (INITIAL_OIL_ENTRIES || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_oil_entries`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_OIL_ENTRIES || []));
   });
 
   // Spare Parts Entries State
   const [sparePartEntries, setSparePartEntries] = useState<SparePartEntry[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_spare_entries`);
-    return saved ? JSON.parse(saved) : (INITIAL_SPARE_ENTRIES || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_spare_entries`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_SPARE_ENTRIES || []));
   });
 
   // Blade Master & Life Tracking State
   const [bladeRecords, setBladeRecords] = useState<BladeRecord[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_blade_records`);
-    return saved ? JSON.parse(saved) : (INITIAL_BLADES || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_blade_records`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_BLADES || []));
   });
 
   // Machine Maintenance Records State
   const [maintenanceRecords, setMaintenanceRecords] = useState<MachineMaintenanceRecord[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_maintenance_records`);
-    return saved ? JSON.parse(saved) : (INITIAL_MAINTENANCE_RECORDS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_maintenance_records`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_MAINTENANCE_RECORDS || []));
   });
 
   // Food Purchases (Worker Welfare) State
   const [foodPurchases, setFoodPurchases] = useState<FoodPurchaseBill[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_food_purchases`);
-    return saved ? JSON.parse(saved) : (INITIAL_FOOD_PURCHASES || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_food_purchases`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_FOOD_PURCHASES || []));
   });
 
   // Tools Room Rent State
   const [toolsRoomRent, setToolsRoomRent] = useState<ToolsRoomRentRecord[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_tools_rent`);
-    return saved ? JSON.parse(saved) : (INITIAL_TOOLS_RENT || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_tools_rent`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_TOOLS_RENT || []));
   });
 
   // Daily Machine Work Logs State
   const [machineWorkLogs, setMachineWorkLogs] = useState<DailyMachineWorkLog[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_machine_work_logs`);
-    return saved ? JSON.parse(saved) : (INITIAL_MACHINE_WORK_LOGS || []);
+    const saved = getCachedItem(`${STORAGE_KEY}_machine_work_logs`);
+    return saved ? JSON.parse(saved) : productionSafeInitial((INITIAL_MACHINE_WORK_LOGS || []));
   });
 
-  // Sync state to local cache for instant offline fallback
+  // Browser storage is a development-only convenience; PostgreSQL is authoritative in production.
   useEffect(() => {
+    if (IS_PRODUCTION_CLIENT) return;
     try {
-      localStorage.setItem(`${STORAGE_KEY}_vehicles`, JSON.stringify(vehicles));
-      localStorage.setItem(`${STORAGE_KEY}_drivers`, JSON.stringify(drivers));
-      localStorage.setItem(`${STORAGE_KEY}_customers`, JSON.stringify(customers));
-      localStorage.setItem(`${STORAGE_KEY}_staff`, JSON.stringify(staff));
-      localStorage.setItem(`${STORAGE_KEY}_attendance`, JSON.stringify(attendance));
-      localStorage.setItem(`${STORAGE_KEY}_advances`, JSON.stringify(advances));
-      localStorage.setItem(`${STORAGE_KEY}_payrolls`, JSON.stringify(payrolls));
-      localStorage.setItem(`${STORAGE_KEY}_rates`, JSON.stringify(rates));
-      localStorage.setItem(`${STORAGE_KEY}_loads`, JSON.stringify(loads));
-      localStorage.setItem(`${STORAGE_KEY}_gate_passes`, JSON.stringify(gatePasses));
-      localStorage.setItem(`${STORAGE_KEY}_production`, JSON.stringify(production));
-      localStorage.setItem(`${STORAGE_KEY}_stock_adjustments`, JSON.stringify(stockAdjustments));
-      localStorage.setItem(`${STORAGE_KEY}_income`, JSON.stringify(income));
-      localStorage.setItem(`${STORAGE_KEY}_expenses`, JSON.stringify(expenses));
-      localStorage.setItem(`${STORAGE_KEY}_payments`, JSON.stringify(payments));
-      localStorage.setItem(`${STORAGE_KEY}_statements`, JSON.stringify(statements));
-      localStorage.setItem(`${STORAGE_KEY}_rotations`, JSON.stringify(rotations));
-      localStorage.setItem(`${STORAGE_KEY}_vehicle_transactions`, JSON.stringify(vehicleTransactions));
-      localStorage.setItem(`${STORAGE_KEY}_orders`, JSON.stringify(orders));
-      localStorage.setItem(`${STORAGE_KEY}_quarries`, JSON.stringify(quarries));
-      localStorage.setItem(`${STORAGE_KEY}_active_quarry_id`, activeQuarryId);
-      localStorage.setItem(`${STORAGE_KEY}_branding`, JSON.stringify(branding));
-      localStorage.setItem(`${STORAGE_KEY}_billing_config`, JSON.stringify(billingConfig));
-      localStorage.setItem(`${STORAGE_KEY}_theme`, theme);
-      localStorage.setItem(`${STORAGE_KEY}_driver_collections`, JSON.stringify(driverCollections));
-      localStorage.setItem(`${STORAGE_KEY}_daily_production_records`, JSON.stringify(dailyProductionRecords));
-      localStorage.setItem(`${STORAGE_KEY}_gap_queue`, JSON.stringify(gapQueue));
-      localStorage.setItem(`${STORAGE_KEY}_gap_offer_events`, JSON.stringify(gapOfferEvents));
-      localStorage.setItem(`${STORAGE_KEY}_round_logs`, JSON.stringify(roundLogs));
-      localStorage.setItem(`${STORAGE_KEY}_machines`, JSON.stringify(machines));
-      localStorage.setItem(`${STORAGE_KEY}_jcb_records`, JSON.stringify(jcbRecords));
-      localStorage.setItem(`${STORAGE_KEY}_rent_contracts`, JSON.stringify(rentContracts));
-      localStorage.setItem(`${STORAGE_KEY}_vendors`, JSON.stringify(vendors));
-      localStorage.setItem(`${STORAGE_KEY}_diesel_entries`, JSON.stringify(dieselEntries));
-      localStorage.setItem(`${STORAGE_KEY}_oil_entries`, JSON.stringify(oilEntries));
-      localStorage.setItem(`${STORAGE_KEY}_spare_entries`, JSON.stringify(sparePartEntries));
-      localStorage.setItem(`${STORAGE_KEY}_blade_records`, JSON.stringify(bladeRecords));
-      localStorage.setItem(`${STORAGE_KEY}_maintenance_records`, JSON.stringify(maintenanceRecords));
-      localStorage.setItem(`${STORAGE_KEY}_food_purchases`, JSON.stringify(foodPurchases));
-      localStorage.setItem(`${STORAGE_KEY}_tools_rent`, JSON.stringify(toolsRoomRent));
-      localStorage.setItem(`${STORAGE_KEY}_machine_work_logs`, JSON.stringify(machineWorkLogs));
+      setCachedItem(`${STORAGE_KEY}_vehicles`, JSON.stringify(vehicles));
+      setCachedItem(`${STORAGE_KEY}_drivers`, JSON.stringify(drivers));
+      setCachedItem(`${STORAGE_KEY}_customers`, JSON.stringify(customers));
+      setCachedItem(`${STORAGE_KEY}_staff`, JSON.stringify(staff));
+      setCachedItem(`${STORAGE_KEY}_attendance`, JSON.stringify(attendance));
+      setCachedItem(`${STORAGE_KEY}_advances`, JSON.stringify(advances));
+      setCachedItem(`${STORAGE_KEY}_payrolls`, JSON.stringify(payrolls));
+      setCachedItem(`${STORAGE_KEY}_rates`, JSON.stringify(rates));
+      setCachedItem(`${STORAGE_KEY}_loads`, JSON.stringify(loads));
+      setCachedItem(`${STORAGE_KEY}_gate_passes`, JSON.stringify(gatePasses));
+      setCachedItem(`${STORAGE_KEY}_production`, JSON.stringify(production));
+      setCachedItem(`${STORAGE_KEY}_stock_adjustments`, JSON.stringify(stockAdjustments));
+      setCachedItem(`${STORAGE_KEY}_income`, JSON.stringify(income));
+      setCachedItem(`${STORAGE_KEY}_expenses`, JSON.stringify(expenses));
+      setCachedItem(`${STORAGE_KEY}_payments`, JSON.stringify(payments));
+      setCachedItem(`${STORAGE_KEY}_statements`, JSON.stringify(statements));
+      setCachedItem(`${STORAGE_KEY}_rotations`, JSON.stringify(rotations));
+      setCachedItem(`${STORAGE_KEY}_vehicle_transactions`, JSON.stringify(vehicleTransactions));
+      setCachedItem(`${STORAGE_KEY}_orders`, JSON.stringify(orders));
+      setCachedItem(`${STORAGE_KEY}_quarries`, JSON.stringify(quarries));
+      setCachedItem(`${STORAGE_KEY}_active_quarry_id`, activeQuarryId);
+      setCachedItem(`${STORAGE_KEY}_branding`, JSON.stringify(branding));
+      setCachedItem(`${STORAGE_KEY}_billing_config`, JSON.stringify(billingConfig));
+      setCachedItem(`${STORAGE_KEY}_theme`, theme);
+      setCachedItem(`${STORAGE_KEY}_driver_collections`, JSON.stringify(driverCollections));
+      setCachedItem(`${STORAGE_KEY}_daily_production_records`, JSON.stringify(dailyProductionRecords));
+      setCachedItem(`${STORAGE_KEY}_gap_queue`, JSON.stringify(gapQueue));
+      setCachedItem(`${STORAGE_KEY}_gap_offer_events`, JSON.stringify(gapOfferEvents));
+      setCachedItem(`${STORAGE_KEY}_round_logs`, JSON.stringify(roundLogs));
+      setCachedItem(`${STORAGE_KEY}_machines`, JSON.stringify(machines));
+      setCachedItem(`${STORAGE_KEY}_jcb_records`, JSON.stringify(jcbRecords));
+      setCachedItem(`${STORAGE_KEY}_rent_contracts`, JSON.stringify(rentContracts));
+      setCachedItem(`${STORAGE_KEY}_vendors`, JSON.stringify(vendors));
+      setCachedItem(`${STORAGE_KEY}_diesel_entries`, JSON.stringify(dieselEntries));
+      setCachedItem(`${STORAGE_KEY}_oil_entries`, JSON.stringify(oilEntries));
+      setCachedItem(`${STORAGE_KEY}_spare_entries`, JSON.stringify(sparePartEntries));
+      setCachedItem(`${STORAGE_KEY}_blade_records`, JSON.stringify(bladeRecords));
+      setCachedItem(`${STORAGE_KEY}_maintenance_records`, JSON.stringify(maintenanceRecords));
+      setCachedItem(`${STORAGE_KEY}_food_purchases`, JSON.stringify(foodPurchases));
+      setCachedItem(`${STORAGE_KEY}_tools_rent`, JSON.stringify(toolsRoomRent));
+      setCachedItem(`${STORAGE_KEY}_machine_work_logs`, JSON.stringify(machineWorkLogs));
     } catch (e) {
       console.warn('Cache error:', e);
     }
@@ -751,12 +782,9 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Helper to generate audit tracking fields
   const getAuditInfo = useCallback(() => {
-    const creatorName = authUser?.shortName || currentUser;
-    const creatorEmail =
-      authUser?.email ||
-      (creatorName === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com');
-    const creatorId =
-      authUser?.id || (creatorName === 'Nafid' ? 'goog_nafid_rz' : 'goog_aflah_rz');
+    const creatorName = authUser?.shortName || (IS_PRODUCTION_CLIENT ? 'Authorized User' : currentUser);
+    const creatorEmail = authUser?.email || (IS_PRODUCTION_CLIENT ? '' : (creatorName === 'Nafid' ? 'nafidkhan@racezoneventures.com' : 'aflah@racezoneventures.com'));
+    const creatorId = authUser?.id || (IS_PRODUCTION_CLIENT ? '' : (creatorName === 'Nafid' ? 'goog_nafid_rz' : 'goog_aflah_rz'));
 
     return {
       created_by_user_id: creatorId,
@@ -771,9 +799,9 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Opening + Production + Adjustments - Confirmed Gate Pass/Dispatch = Closing Stock
   const stock = useMemo(() => {
     const result: Record<MaterialType, number> = {
-      'Laterite Stone — 1st': INITIAL_STOCK['Laterite Stone — 1st'],
-      'Laterite Stone — 2nd': INITIAL_STOCK['Laterite Stone — 2nd'],
-      'Laterite Stone — 3rd': INITIAL_STOCK['Laterite Stone — 3rd'],
+      'Laterite Stone — 1st': IS_PRODUCTION_CLIENT ? 0 : INITIAL_STOCK['Laterite Stone — 1st'],
+      'Laterite Stone — 2nd': IS_PRODUCTION_CLIENT ? 0 : INITIAL_STOCK['Laterite Stone — 2nd'],
+      'Laterite Stone — 3rd': IS_PRODUCTION_CLIENT ? 0 : INITIAL_STOCK['Laterite Stone — 3rd'],
     };
 
     production.forEach((p) => {
@@ -2160,7 +2188,7 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Multi-Quarry & Land Owner Actions
   const setActiveQuarryId = useCallback((id: string) => {
     setActiveQuarryIdState(id);
-    localStorage.setItem(`${STORAGE_KEY}_active_quarry_id`, id);
+    setCachedItem(`${STORAGE_KEY}_active_quarry_id`, id);
     fetch('/api/active-quarry', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2317,7 +2345,7 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const setTheme = useCallback((newTheme: AppTheme) => {
     setThemeState(newTheme);
-    localStorage.setItem(`${STORAGE_KEY}_theme`, newTheme);
+    setCachedItem(`${STORAGE_KEY}_theme`, newTheme);
   }, []);
 
   // Driver Collection Actions (UNSETTLED DRIVER COLLECTION → Company Settlement)
