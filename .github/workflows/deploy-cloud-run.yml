@@ -28,6 +28,8 @@ jobs:
           CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           BOOTSTRAP_OWNER_UID: ${{ vars.BOOTSTRAP_OWNER_UID }}
+          BOOTSTRAP_ADMIN_UID: ${{ vars.BOOTSTRAP_ADMIN_UID }}
+          ALLOWED_USER_EMAILS_CONFIGURED: ${{ secrets.ALLOWED_USER_EMAILS }}
           OWNER_BOOTSTRAP_COMPLETED: ${{ vars.OWNER_BOOTSTRAP_COMPLETED }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -39,9 +41,18 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          for name in GCP_PROJECT_ID GCP_REGION CLOUD_SQL_INSTANCE FIREBASE_PROJECT_ID VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT; do
+          for name in GCP_PROJECT_ID GCP_REGION CLOUD_SQL_INSTANCE FIREBASE_PROJECT_ID VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT ALLOWED_USER_EMAILS_CONFIGURED; do
             if [ -z "${!name:-}" ]; then echo "::error::Missing required GitHub variable/secret: $name"; exit 1; fi
           done
+          node --input-type=module -e '
+            const value = process.env.ALLOWED_USER_EMAILS_CONFIGURED || "";
+            const pattern = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+            const emails = value.split(",").map(v => v.trim().toLowerCase());
+            if (emails.length !== 2 || new Set(emails).size !== 2 || emails.some(v => !pattern.test(v))) {
+              console.error("ALLOWED_USER_EMAILS secret must contain exactly two valid unique addresses.");
+              process.exit(1);
+            }
+          '
           if [ -z "${BOOTSTRAP_OWNER_UID:-}" ] && [ "${OWNER_BOOTSTRAP_COMPLETED:-}" != "true" ]; then
             echo "::error::Set BOOTSTRAP_OWNER_UID for the first owner bootstrap, or set OWNER_BOOTSTRAP_COMPLETED=true after the owner role is verified."
             exit 1
@@ -136,7 +147,15 @@ jobs:
             --platform managed --allow-unauthenticated \
             --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
             --add-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
-            --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres,FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,BOOTSTRAP_OWNER_UID=$BOOTSTRAP_OWNER_UID" \
-            --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest,FIREBASE_CLIENT_EMAIL=rz-minetrix-firebase-client-email:latest,FIREBASE_PRIVATE_KEY=rz-minetrix-firebase-private-key:latest" \
+            --set-env-vars "NODE_ENV=production,DB_ADAPTER=postgres,FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,BOOTSTRAP_OWNER_UID=$BOOTSTRAP_OWNER_UID,BOOTSTRAP_ADMIN_UID=${{ vars.BOOTSTRAP_ADMIN_UID }}" \
+            --set-secrets "DATABASE_URL=rz-minetrix-database-url:latest,FIREBASE_CLIENT_EMAIL=rz-minetrix-firebase-client-email:latest,FIREBASE_PRIVATE_KEY=rz-minetrix-firebase-private-key:latest,ALLOWED_USER_EMAILS=ALLOWED_USER_EMAILS:latest" \
             --concurrency 1 --max 1 --min 0 --timeout 300
+          SERVICE_URL="$(gcloud run services describe rz-minetrix-erp --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')"
+          curl --fail --silent --show-error --max-time 30 "$SERVICE_URL/api/health" >/dev/null
+          code="$(curl --silent --show-error --output /tmp/state.json --write-out '%{http_code}' --max-time 30 "$SERVICE_URL/api/state")"
+          if [ "$code" != "401" ]; then
+            echo "::error::Unauthenticated /api/state returned HTTP $code (expected 401)."
+            exit 1
+          fi
+          echo "Health and unauthenticated API protection verified."
           gcloud run services describe rz-minetrix-erp --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)'
