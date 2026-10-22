@@ -341,15 +341,15 @@ const IS_PRODUCTION_CLIENT = import.meta.env.PROD;
 // Production must never read or write old browser cache: it may contain demo/test records.
 function getCachedItem(key: string): string | null {
   if (IS_PRODUCTION_CLIENT) return null;
-  try { return window.getCachedItem(key); } catch { return null; }
+  try { return window.localStorage.getItem(key); } catch { return null; }
 }
 function setCachedItem(key: string, value: string): void {
   if (IS_PRODUCTION_CLIENT) return;
-  try { window.setCachedItem(key, value); } catch { /* Cache is optional in development. */ }
+  try { window.localStorage.setItem(key, value); } catch { /* Cache is optional in development. */ }
 }
 function removeCachedItem(key: string): void {
   if (IS_PRODUCTION_CLIENT) return;
-  try { window.removeCachedItem(key); } catch { /* Cache is optional in development. */ }
+  try { window.localStorage.removeItem(key); } catch { /* Cache is optional in development. */ }
 }
 function productionSafeInitial<T>(seed: T): T {
   if (IS_PRODUCTION_CLIENT && Array.isArray(seed)) return [] as T;
