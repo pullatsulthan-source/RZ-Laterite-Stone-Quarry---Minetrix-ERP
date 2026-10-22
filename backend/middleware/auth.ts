@@ -1,5 +1,4 @@
 import type { NextFunction, Request, Response } from 'express';
-import { verifyIdToken } from '../../src/auth/firebase-admin';
 
 export type AuthenticatedUser = {
   uid: string;
@@ -18,7 +17,7 @@ declare global {
   }
 }
 
-async function upsertUser(uid: string, email?: string, name?: string, photo?: string) {
+async function provisionUser(uid: string, email?: string, name?: string, photo?: string) {
   const { db } = await import('../db/connection');
   const { users } = await import('../db/schema');
   const values = {
@@ -39,16 +38,20 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!header || !/^Bearer\s+\S+$/i.test(header)) return res.status(401).json({ error: 'Authentication required' });
   const token = header.replace(/^Bearer\s+/i, '').trim();
   try {
+    const { verifyIdToken } = await import('../../src/auth/firebase-admin.ts');
     const decoded = await verifyIdToken(token);
-    await upsertUser(decoded.uid, decoded.email, decoded.name, decoded.picture);
+    await provisionUser(decoded.uid, decoded.email, decoded.name, decoded.picture);
     const { db } = await import('../db/connection');
     const { users, user_quarry_permissions } = await import('../db/schema');
-    const [dbUser] = await db.select().from(users).where((await import('drizzle-orm')).eq(users.id, decoded.uid)).limit(1);
+    const { eq } = await import('drizzle-orm');
+    const [dbUser] = await db.select().from(users).where(eq(users.id, decoded.uid)).limit(1);
     if (!dbUser) return res.status(401).json({ error: 'Application user could not be provisioned' });
-    const perms = await db.select().from(user_quarry_permissions).where((await import('drizzle-orm')).eq(user_quarry_permissions.user_id, decoded.uid));
+    const perms = await db.select().from(user_quarry_permissions).where(eq(user_quarry_permissions.user_id, decoded.uid));
     req.user = {
-      uid: decoded.uid, email: decoded.email || dbUser.email || '',
-      name: decoded.name || dbUser.display_name || null, picture: decoded.picture || dbUser.photo_url || null,
+      uid: decoded.uid,
+      email: decoded.email || dbUser.email || '',
+      name: decoded.name || dbUser.display_name || null,
+      picture: decoded.picture || dbUser.photo_url || null,
       role: String(dbUser.role || 'VIEWER').toUpperCase(),
       quarryIds: perms.map((p: { quarry_id?: string | null }) => p.quarry_id).filter((id: string | null | undefined): id is string => Boolean(id)),
     };
