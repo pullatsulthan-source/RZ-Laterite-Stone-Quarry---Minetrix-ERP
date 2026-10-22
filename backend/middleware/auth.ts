@@ -21,15 +21,16 @@ declare global {
 async function provisionUser(uid: string, email?: string, name?: string, photo?: string) {
   const { db } = await import('../db/connection');
   const { users } = await import('../db/schema');
+  const isBootstrapOwner = process.env.BOOTSTRAP_OWNER_UID === uid;
   const values = {
     id: uid, email: email || '', display_name: name || null, photo_url: photo || null,
-    role: process.env.BOOTSTRAP_OWNER_UID === uid ? 'OWNER' : 'VIEWER',
+    role: isBootstrapOwner ? 'OWNER' : 'VIEWER',
     updated_at: new Date(),
   };
   const updates = {
     email: values.email, display_name: values.display_name, photo_url: values.photo_url,
     updated_at: values.updated_at,
-    ...(process.env.BOOTSTRAP_OWNER_UID === uid ? { role: 'OWNER' } : {}),
+    ...(isBootstrapOwner ? { role: 'OWNER' } : {}),
   };
   await db.insert(users).values(values).onConflictDoUpdate({ target: users.id, set: updates });
 }
@@ -46,18 +47,20 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
     await provisionUser(decoded.uid, decoded.email, decoded.name, decoded.picture);
     const { db } = await import('../db/connection');
-    const { users, user_quarry_permissions } = await import('../db/schema');
+    const schema = await import('../db/schema');
     const { eq } = await import('drizzle-orm');
-    const [dbUser] = await db.select().from(users).where(eq(users.id, decoded.uid)).limit(1);
+    const [dbUser] = await db.select().from(schema.users).where(eq(schema.users.id, decoded.uid)).limit(1);
     if (!dbUser) return res.status(401).json({ error: 'Application user could not be provisioned' });
-    const perms = await db.select().from(user_quarry_permissions).where(eq(user_quarry_permissions.user_id, decoded.uid));
+
+    const memberships = await db.select().from(schema.quarryMemberships)
+      .where(eq(schema.quarryMemberships.userId, decoded.uid));
     req.user = {
       uid: decoded.uid,
       email: decoded.email || dbUser.email || '',
       name: decoded.name || dbUser.display_name || null,
       picture: decoded.picture || dbUser.photo_url || null,
       role: String(dbUser.role || 'VIEWER').toUpperCase(),
-      quarryIds: perms.map((p: { quarry_id?: string | null }) => p.quarry_id).filter((id: string | null | undefined): id is string => Boolean(id)),
+      quarryIds: memberships.filter((m: { active: boolean }) => m.active).map((m: { quarryId: string }) => m.quarryId),
     };
     return next();
   } catch {
