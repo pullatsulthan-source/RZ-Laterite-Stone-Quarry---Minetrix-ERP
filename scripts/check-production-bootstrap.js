@@ -24,22 +24,36 @@ try {
     'vehicleTransactions', 'orders', 'quarries', 'driverCollections',
   ];
   const missing = requiredCollections.filter((key) => !Object.hasOwn(state ?? {}, key));
-  if (missing.length) {
-    throw new Error(`app_state/default is missing required collections: ${missing.join(', ')}`);
+  if (missing.length) throw new Error(`app_state/default is missing required collections: ${missing.join(', ')}`);
+
+  const quarryCount = Array.isArray(state.quarries) ? state.quarries.length : 0;
+  const hasRealConfig =
+    quarryCount > 0 &&
+    Boolean(state.branding) &&
+    Boolean(state.billingConfig) &&
+    Boolean(state.rates && Object.keys(state.rates).length > 0);
+
+  if (!hasRealConfig) {
+    // A clean first deployment can serve the Google-login shell but must stay in setup mode.
+    // Do not deploy on the false assumption that operational ERP setup is complete.
+    console.log(JSON.stringify({
+      status: 'SETUP_REQUIRED',
+      version: Number(result.rows[0].version),
+      quarryCount,
+      collectionCount: requiredCollections.length,
+      demoDataImported: false,
+      message: 'No demo data was imported. Add the real quarry profile, rates, branding and billing configuration before using ERP operations.',
+    }));
+  } else {
+    console.log(JSON.stringify({
+      status: 'verified',
+      version: Number(result.rows[0].version),
+      quarryCount,
+      collectionCount: requiredCollections.length,
+      demoDataImported: false,
+      message: 'Production state structure verified; row contents were not printed.',
+    }));
   }
-  if (!Array.isArray(state.quarries) || state.quarries.length === 0) {
-    throw new Error('No real quarry is configured in app_state/default. Deployment is blocked until the production quarry profile is configured.');
-  }
-  if (!state.branding || !state.billingConfig || !state.rates || Object.keys(state.rates).length === 0) {
-    throw new Error('Required branding, billing configuration, or rates are missing. Deployment is blocked until real production configuration exists.');
-  }
-  console.log(JSON.stringify({
-    status: 'verified',
-    version: Number(result.rows[0].version),
-    quarryCount: state.quarries.length,
-    collectionCount: requiredCollections.length,
-    message: 'Production state structure verified; no row contents or sensitive values were printed.',
-  }));
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Production bootstrap check failed.');
   process.exitCode = 1;
