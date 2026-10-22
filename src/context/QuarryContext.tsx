@@ -361,6 +361,9 @@ const EMPTY_QUARRY: QuarryProfile = {
 };
 
 export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [backendReady, setBackendReady] = useState(!IS_PRODUCTION_CLIENT);
+  const [backendError, setBackendError] = useState<string | null>(null);
+
   // Direct active operator between the 2 internal quarry operators (Nafid & Aflah)
   const [currentUser, setCurrentUserState] = useState<AppUser>(() => {
     const saved = getCachedItem('rz_active_operator');
@@ -719,65 +722,92 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   ]);
 
   // Refresh data from shared backend database
+  const [backendReady, setBackendReady] = useState(!IS_PRODUCTION_CLIENT);
+  const [backendError, setBackendError] = useState<string | null>(null);
+
   const refreshBackendData = useCallback(async () => {
     try {
-      const res = await fetch('/api/state');
-      if (res.ok) {
-        const backendDb = await res.json();
-        if (backendDb.loads) setLoads(backendDb.loads);
-        if (backendDb.gatePasses) setGatePasses(backendDb.gatePasses);
-        if (backendDb.vehicles) setVehicles(backendDb.vehicles);
-        if (backendDb.drivers) setDrivers(backendDb.drivers);
-        if (backendDb.customers) setCustomers(backendDb.customers);
-        if (backendDb.staff) setStaff(backendDb.staff);
-        if (backendDb.attendance) setAttendance(backendDb.attendance);
-        if (backendDb.advances) setAdvances(backendDb.advances);
-        if (backendDb.payrolls) setPayrolls(backendDb.payrolls);
-        if (backendDb.rates) setRates(backendDb.rates);
-        if (backendDb.production) setProduction(backendDb.production);
-        if (backendDb.stockAdjustments) setStockAdjustments(backendDb.stockAdjustments);
-        if (backendDb.income) setIncome(backendDb.income);
-        if (backendDb.expenses) setExpenses(backendDb.expenses);
-        if (backendDb.payments) setPayments(backendDb.payments);
-        if (backendDb.statements) setStatements(backendDb.statements);
-        if (backendDb.rotations && Array.isArray(backendDb.rotations) && backendDb.rotations.length > 0) {
-          setRotations(backendDb.rotations);
+      const response = await fetch('/api/state', { cache: 'no-store' });
+      if (!response.ok) {
+        if (IS_PRODUCTION_CLIENT) {
+          setBackendReady(false);
+          setBackendError(response.status === 401 || response.status === 403
+            ? 'Your session is not authorized. Please sign in with an approved Google account.'
+            : 'The production API is unavailable. No local or demo data will be shown.');
         }
-        if (backendDb.vehicleTransactions && Array.isArray(backendDb.vehicleTransactions) && backendDb.vehicleTransactions.length > 0) {
-          setVehicleTransactions(backendDb.vehicleTransactions);
-        }
-        if (backendDb.orders && Array.isArray(backendDb.orders) && backendDb.orders.length > 0) {
-          setOrders(backendDb.orders);
-        }
-        if (backendDb.quarries && Array.isArray(backendDb.quarries) && backendDb.quarries.length > 0) {
-          setQuarries(backendDb.quarries);
-        }
-        if (backendDb.activeQuarryId) {
-          setActiveQuarryIdState(backendDb.activeQuarryId);
-        }
-        if (backendDb.branding) {
-          setBranding(backendDb.branding);
-        }
-        if (backendDb.billingConfig) {
-          setBillingConfig(backendDb.billingConfig);
-        }
-        if (backendDb.theme) {
-          setThemeState(backendDb.theme);
-        }
-        if (backendDb.driverCollections && Array.isArray(backendDb.driverCollections) && backendDb.driverCollections.length > 0) {
-          setDriverCollections(backendDb.driverCollections);
-        }
+        return;
       }
-    } catch (err) {
-      // Backend polling error ignored in transient offline
+      const backendDb = await response.json();
+      const isArray = (value: unknown): value is any[] => Array.isArray(value);
+      if (IS_PRODUCTION_CLIENT) {
+        setVehicles(isArray(backendDb.vehicles) ? backendDb.vehicles : []);
+        setDrivers(isArray(backendDb.drivers) ? backendDb.drivers : []);
+        setCustomers(isArray(backendDb.customers) ? backendDb.customers : []);
+        setStaff(isArray(backendDb.staff) ? backendDb.staff : []);
+        setAttendance(isArray(backendDb.attendance) ? backendDb.attendance : []);
+        setAdvances(isArray(backendDb.advances) ? backendDb.advances : []);
+        setPayrolls(isArray(backendDb.payrolls) ? backendDb.payrolls : []);
+        setLoads(isArray(backendDb.loads) ? backendDb.loads : []);
+        setGatePasses(isArray(backendDb.gatePasses) ? backendDb.gatePasses : []);
+        setProduction(isArray(backendDb.production) ? backendDb.production : []);
+        setStockAdjustments(isArray(backendDb.stockAdjustments) ? backendDb.stockAdjustments : []);
+        setIncome(isArray(backendDb.income) ? backendDb.income : []);
+        setExpenses(isArray(backendDb.expenses) ? backendDb.expenses : []);
+        setPayments(isArray(backendDb.payments) ? backendDb.payments : []);
+        setStatements(isArray(backendDb.statements) ? backendDb.statements : []);
+        setRotations(isArray(backendDb.rotations) ? backendDb.rotations : []);
+        setVehicleTransactions(isArray(backendDb.vehicleTransactions) ? backendDb.vehicleTransactions : []);
+        setOrders(isArray(backendDb.orders) ? backendDb.orders : []);
+        setQuarries(isArray(backendDb.quarries) ? backendDb.quarries : []);
+        setDriverCollections(isArray(backendDb.driverCollections) ? backendDb.driverCollections : []);
+        setActiveQuarryIdState(typeof backendDb.activeQuarryId === 'string' ? backendDb.activeQuarryId : '');
+        setBranding(backendDb.branding && typeof backendDb.branding === 'object' ? backendDb.branding : {});
+        setBillingConfig(backendDb.billingConfig && typeof backendDb.billingConfig === 'object' ? backendDb.billingConfig : {});
+        setRates(backendDb.rates && typeof backendDb.rates === 'object' ? backendDb.rates : {});
+        if (typeof backendDb.theme === 'string') setThemeState(backendDb.theme);
+        setBackendReady(true);
+        setBackendError(null);
+        return;
+      }
+
+      if (backendDb.loads) setLoads(backendDb.loads);
+      if (backendDb.gatePasses) setGatePasses(backendDb.gatePasses);
+      if (backendDb.vehicles) setVehicles(backendDb.vehicles);
+      if (backendDb.drivers) setDrivers(backendDb.drivers);
+      if (backendDb.customers) setCustomers(backendDb.customers);
+      if (backendDb.staff) setStaff(backendDb.staff);
+      if (backendDb.attendance) setAttendance(backendDb.attendance);
+      if (backendDb.advances) setAdvances(backendDb.advances);
+      if (backendDb.payrolls) setPayrolls(backendDb.payrolls);
+      if (backendDb.rates) setRates(backendDb.rates);
+      if (backendDb.production) setProduction(backendDb.production);
+      if (backendDb.stockAdjustments) setStockAdjustments(backendDb.stockAdjustments);
+      if (backendDb.income) setIncome(backendDb.income);
+      if (backendDb.expenses) setExpenses(backendDb.expenses);
+      if (backendDb.payments) setPayments(backendDb.payments);
+      if (backendDb.statements) setStatements(backendDb.statements);
+      if (isArray(backendDb.rotations) && backendDb.rotations.length > 0) setRotations(backendDb.rotations);
+      if (isArray(backendDb.vehicleTransactions) && backendDb.vehicleTransactions.length > 0) setVehicleTransactions(backendDb.vehicleTransactions);
+      if (isArray(backendDb.orders) && backendDb.orders.length > 0) setOrders(backendDb.orders);
+      if (isArray(backendDb.quarries) && backendDb.quarries.length > 0) setQuarries(backendDb.quarries);
+      if (backendDb.activeQuarryId) setActiveQuarryIdState(backendDb.activeQuarryId);
+      if (backendDb.branding) setBranding(backendDb.branding);
+      if (backendDb.billingConfig) setBillingConfig(backendDb.billingConfig);
+      if (backendDb.theme) setThemeState(backendDb.theme);
+      if (isArray(backendDb.driverCollections) && backendDb.driverCollections.length > 0) setDriverCollections(backendDb.driverCollections);
+    } catch {
+      if (IS_PRODUCTION_CLIENT) {
+        setBackendReady(false);
+        setBackendError('The production API could not be reached. No local or demo data will be shown.');
+      }
     }
   }, []);
 
-  // Multi-device synchronization polling (polls every 3 seconds)
+  // Production UI must receive a successful authenticated server snapshot before operations are shown.
   useEffect(() => {
-    refreshBackendData();
-    const interval = setInterval(refreshBackendData, 3500);
-    return () => clearInterval(interval);
+    void refreshBackendData();
+    const interval = window.setInterval(() => void refreshBackendData(), 3500);
+    return () => window.clearInterval(interval);
   }, [refreshBackendData]);
 
   // Helper to generate audit tracking fields
@@ -3345,7 +3375,15 @@ export const QuarryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         refreshBackendData,
       }}
     >
-      {children}
+      {IS_PRODUCTION_CLIENT && !backendReady ? (
+        <div className="min-h-screen bg-[#090a0d] text-[#e5e7eb] flex items-center justify-center p-6">
+          <div className="max-w-md rounded-2xl border border-[#d4af37]/30 bg-[#12141a] p-8">
+            <div className="text-xs tracking-[0.35em] text-[#d4af37]">RZ MINETRIX</div>
+            <h1 className="mt-3 text-xl font-semibold">Connecting to production data</h1>
+            <p className="mt-3 text-sm text-slate-300">{backendError || 'Loading server-verified quarry records…'}</p>
+          </div>
+        </div>
+      ) : children}
     </QuarryContext.Provider>
   );
 };
