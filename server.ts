@@ -238,3 +238,48 @@ function route(pathName: string, collection: keyof QuarryDatabase, validator?: a
     (db[collection] as any) = after; saveDatabase(db); return res.json({ success: true });
   });
 }
+route('loads', 'loads', createLoadSchema); route('gate-passes', 'gatePasses', createGatePassSchema); route('production', 'production', createProductionSchema);
+route('stock-adjustments', 'stockAdjustments'); route('income', 'income', createIncomeSchema); route('expenses', 'expenses', createExpenseSchema);
+route('payments', 'payments', createPaymentSchema); route('statements', 'statements'); route('vehicles', 'vehicles'); route('drivers', 'drivers');
+route('customers', 'customers'); route('staff', 'staff'); route('attendance', 'attendance'); route('advances', 'advances'); route('payrolls', 'payrolls');
+route('rotations', 'rotations'); route('vehicle-transactions', 'vehicleTransactions'); route('orders', 'orders', createOrderSchema); route('quarries', 'quarries');
+route('driver-collections', 'driverCollections');
+app.get('/api/branding', (_req: Request, res: Response) => res.json(db.branding || {}));
+app.put('/api/branding', (req: Request, res: Response) => { if (!['OWNER', 'ADMIN'].includes(String(req.user?.role).toUpperCase())) return res.status(403).json({ error: 'Admin required' }); db.branding = { ...db.branding, ...req.body }; saveDatabase(db); return res.json(db.branding); });
+app.get('/api/billing-config', (_req: Request, res: Response) => res.json(db.billingConfig || {}));
+app.put('/api/billing-config', (req: Request, res: Response) => { if (!['OWNER', 'ADMIN'].includes(String(req.user?.role).toUpperCase())) return res.status(403).json({ error: 'Admin required' }); db.billingConfig = { ...db.billingConfig, ...req.body }; saveDatabase(db); return res.json(db.billingConfig); });
+app.get('/api/rates', (_req: Request, res: Response) => res.json(db.rates || {}));
+app.put('/api/rates', (req: Request, res: Response) => { if (!['OWNER', 'ADMIN'].includes(String(req.user?.role).toUpperCase())) return res.status(403).json({ error: 'Admin required' }); db.rates = req.body; saveDatabase(db); return res.json({ success: true }); });
+app.post('/api/active-quarry', (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const id = req.body?.activeQuarryId;
+  if (typeof id !== 'string' || !id.trim()) return res.status(422).json({ error: 'activeQuarryId is required' });
+  if (!canAccessQuarry(user, id.trim())) return res.status(403).json({ error: 'No access to requested quarry' });
+  activeQuarryByUser.set(user.uid, id.trim()); return res.json({ success: true, activeQuarryId: id.trim() });
+});
+app.post('/api/reset', requireRole('OWNER'), (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production' || process.env.ENABLE_RESET !== 'true') return res.status(403).json({ error: 'Reset disabled' });
+  if (req.headers['x-confirm-reset'] !== 'CONFIRM_RESET') return res.status(400).json({ error: 'Explicit reset confirmation required' });
+  db = getInitialDatabase(); saveDatabase(db); return res.json({ success: true });
+});
+app.post('/api/import', requireRole(['OWNER', 'ADMIN']), (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production' || process.env.ENABLE_IMPORT !== 'true') return res.status(403).json({ error: 'Import disabled' });
+  if (req.headers['x-confirm-import'] !== 'CONFIRM_IMPORT') return res.status(400).json({ error: 'Explicit import confirmation required' });
+  const data = req.body;
+  if (!data || !Array.isArray(data.loads) || !Array.isArray(data.vehicles)) return res.status(400).json({ error: 'Invalid backup structure' });
+  db = data; saveDatabase(db); return res.json({ success: true });
+});
+app.all(/^\/api\/(.*)/, (_req: Request, res: Response) => res.status(404).json({ error: 'Unknown API route' }));
+async function startServer() {
+  await initializePersistence();
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.resolve(process.cwd(), 'dist')));
+    app.get('*', (_req: Request, res: Response) => res.sendFile(path.resolve(process.cwd(), 'dist/index.html')));
+  }
+  app.listen(PORT, '0.0.0.0', () => console.log(`[RZ MINETRIX ERP] Server running on http://0.0.0.0:${PORT}`));
+}
+startServer().catch(error => { console.error('[startup] Server initialization failed:', error instanceof Error ? error.message : 'unknown error'); process.exitCode = 1; });
