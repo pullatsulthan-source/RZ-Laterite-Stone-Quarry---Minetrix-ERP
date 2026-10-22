@@ -28,7 +28,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'quarry_db.json');
 app.use(express.json({ limit: '10mb' }));
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (process.env.NODE_ENV !== 'production' && !fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 interface QuarryDatabase {
   vehicles: any[]; drivers: any[]; customers: any[]; staff: any[]; attendance: any[];
@@ -43,6 +43,9 @@ let pendingPersistence: Promise<void> = Promise.resolve();
 let persistenceFailure: unknown = null;
 
 function getInitialDatabase(): QuarryDatabase {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Demo seed data is disabled in production. Use a reviewed, data-specific bootstrap.');
+  }
   return {
     rotations: INITIAL_ROTATIONS, vehicleTransactions: INITIAL_VEHICLE_TRANSACTIONS, orders: INITIAL_ORDERS,
     vehicles: INITIAL_VEHICLES.map(v => ({ ...v, created_by_user_id: 'goog_nafid_rz', created_by_name: 'Nafid', created_by_email: 'nafidkhan@racezoneventures.com', created_at: v.createdAt || '2026-01-01T08:00:00Z' })),
@@ -65,11 +68,15 @@ function getInitialDatabase(): QuarryDatabase {
   };
 }
 function writeLocalJson(database: QuarryDatabase) {
+  if (process.env.NODE_ENV === 'production') throw new Error('Local JSON writes are disabled in production.');
   const tempFile = `${DB_FILE}.tmp`;
   fs.writeFileSync(tempFile, JSON.stringify(database, null, 2), 'utf-8');
   fs.renameSync(tempFile, DB_FILE);
 }
 function loadDatabase(): QuarryDatabase {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Local JSON/demo database loading is disabled in production.');
+  }
   try {
     if (fs.existsSync(DB_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
@@ -92,16 +99,16 @@ function loadDatabase(): QuarryDatabase {
       return parsed as QuarryDatabase;
     }
   } catch { console.error('[database] Local state invalid; seed defaults will be used.'); }
-  const initial = getInitialDatabase();
-  if (DB_ADAPTER === 'local-json' && process.env.NODE_ENV !== 'production') writeLocalJson(initial);
-  return initial;
+  return getInitialDatabase();
 }
-let db: QuarryDatabase = getInitialDatabase();
+let db: QuarryDatabase = process.env.NODE_ENV === 'production' ? ({} as QuarryDatabase) : loadDatabase();
 function saveDatabase(database: QuarryDatabase) {
-  if (DB_ADAPTER === 'local-json' || !persistenceReady) {
-    if (DB_ADAPTER === 'local-json' && process.env.NODE_ENV !== 'production') writeLocalJson(database);
+  if (DB_ADAPTER === 'local-json') {
+    if (process.env.NODE_ENV === 'production') throw new Error('DB_ADAPTER=local-json is not permitted in production.');
+    writeLocalJson(database);
     return;
   }
+  if (!persistenceReady) throw new Error('Database is not initialized; refusing to write state.');
   const snapshot = JSON.parse(JSON.stringify(database)) as QuarryDatabase;
   pendingPersistence = pendingPersistence.catch(() => undefined).then(() => writeAppState(snapshot))
     .then(() => { persistenceFailure = null; })
@@ -217,7 +224,7 @@ app.get('/api/state', (req: Request, res: Response) => {
   return res.json(user.role === 'OWNER' || user.role === 'ADMIN' ? db : scopeStateForUser(db as unknown as Record<string, unknown>, user, activeQuarry(user)));
 });
 function route(pathName: string, collection: keyof QuarryDatabase, validator?: any) {
-  app.get('/api/' + pathName, (_req: Request, res: Response) => res.json((db[collection] as any) || []));
+  app.get('/api/' + pathName, (_req: Request, res: Response) => res.json((db[collection] as any) || []);
   app.post('/api/' + pathName, (req: Request, res: Response) => {
     const parsed = validator ? validator.safeParse(req.body) : { success: true, data: req.body };
     if (!parsed.success) return res.status(422).json({ error: 'Invalid data', details: parsed.error.flatten() });
@@ -236,47 +243,3 @@ function route(pathName: string, collection: keyof QuarryDatabase, validator?: a
     (db[collection] as any) = after; saveDatabase(db); return res.json({ success: true });
   });
 }
-route('loads', 'loads', createLoadSchema); route('gate-passes', 'gatePasses', createGatePassSchema); route('production', 'production', createProductionSchema);
-route('stock-adjustments', 'stockAdjustments'); route('income', 'income', createIncomeSchema); route('expenses', 'expenses', createExpenseSchema);
-route('payments', 'payments', createPaymentSchema); route('statements', 'statements'); route('vehicles', 'vehicles'); route('drivers', 'drivers');
-route('customers', 'customers'); route('staff', 'staff'); route('attendance', 'attendance'); route('advances', 'advances'); route('payrolls', 'payrolls');
-route('rotations', 'rotations'); route('vehicle-transactions', 'vehicleTransactions'); route('orders', 'orders', createOrderSchema); route('quarries', 'quarries');
-route('driver-collections', 'driverCollections');
-app.get('/api/branding', (_req: Request, res: Response) => res.json(db.branding || INITIAL_BRANDING));
-app.put('/api/branding', (req: Request, res: Response) => { if (!['OWNER', 'ADMIN'].includes(String(req.user?.role).toUpperCase())) return res.status(403).json({ error: 'Admin required' }); db.branding = { ...db.branding, ...req.body }; saveDatabase(db); return res.json(db.branding); });
-app.get('/api/billing-config', (_req: Request, res: Response) => res.json(db.billingConfig || INITIAL_BILLING_CONFIG));
-app.put('/api/billing-config', (req: Request, res: Response) => { if (!['OWNER', 'ADMIN'].includes(String(req.user?.role).toUpperCase())) return res.status(403).json({ error: 'Admin required' }); db.billingConfig = { ...db.billingConfig, ...req.body }; saveDatabase(db); return res.json(db.billingConfig); });
-app.get('/api/rates', (_req: Request, res: Response) => res.json(db.rates || INITIAL_RATES));
-app.put('/api/rates', (req: Request, res: Response) => { if (!['OWNER', 'ADMIN'].includes(String(req.user?.role).toUpperCase())) return res.status(403).json({ error: 'Admin required' }); db.rates = req.body; saveDatabase(db); return res.json({ success: true }); });
-app.post('/api/active-quarry', (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) return res.status(401).json({ error: 'Authentication required' });
-  const id = req.body?.activeQuarryId;
-  if (typeof id !== 'string' || !id.trim()) return res.status(422).json({ error: 'activeQuarryId is required' });
-  if (!canAccessQuarry(user, id.trim())) return res.status(403).json({ error: 'No access to requested quarry' });
-  activeQuarryByUser.set(user.uid, id.trim()); return res.json({ success: true, activeQuarryId: id.trim() });
-});
-app.post('/api/reset', requireRole('OWNER'), (req: Request, res: Response) => {
-  if (process.env.NODE_ENV === 'production' || process.env.ENABLE_RESET !== 'true') return res.status(403).json({ error: 'Reset disabled' });
-  if (req.headers['x-confirm-reset'] !== 'CONFIRM_RESET') return res.status(400).json({ error: 'Explicit reset confirmation required' });
-  db = getInitialDatabase(); saveDatabase(db); return res.json({ success: true });
-});
-app.post('/api/import', requireRole(['OWNER', 'ADMIN']), (req: Request, res: Response) => {
-  if (req.headers['x-confirm-import'] !== 'CONFIRM_IMPORT') return res.status(400).json({ error: 'Explicit import confirmation required' });
-  const data = req.body;
-  if (!data || !Array.isArray(data.loads) || !Array.isArray(data.vehicles)) return res.status(400).json({ error: 'Invalid backup structure' });
-  db = data; saveDatabase(db); return res.json({ success: true });
-});
-app.all(/^\/api\/(.*)/, (_req: Request, res: Response) => res.status(404).json({ error: 'Unknown API route' }));
-async function startServer() {
-  await initializePersistence();
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.resolve(process.cwd(), 'dist')));
-    app.get('*', (_req: Request, res: Response) => res.sendFile(path.resolve(process.cwd(), 'dist/index.html')));
-  }
-  app.listen(PORT, '0.0.0.0', () => console.log(`[RZ MINETRIX ERP] Server running on http://0.0.0.0:${PORT}`));
-}
-startServer().catch(error => { console.error('[startup] Server initialization failed:', error instanceof Error ? error.message : 'unknown error'); process.exitCode = 1; });
