@@ -1,0 +1,50 @@
+[
+  {
+    "id": "1611c046-5028-4eff-977e-8ab34ec43a48",
+    "request_id": "c43d7a0a-f37b-4f2d-870d-11db27ba13a7",
+    "user_id": "goog_nafid_rz",
+    "action": "READ:db-status",
+    "entity": "db-status",
+    "entity_id": null,
+    "quarry_id": null,
+    "before_data": null,
+    "after_data": null,
+    "reason": null,
+    "http_method": "GET",
+    "route": "/api/db-status",
+    "status_code": 200,
+    "ip_address": "127.0.0.1",
+    "user_agent": "curl/7.88.1",
+    "metadata": {
+      "query": {},
+      "duration_ms": 60,
+      "outcome": "SUCCESS",
+      "content_length": 0
+    },
+    "created_at": "2026-10-24T15:15:55.668Z"
+  },
+  {
+    "id": "6804d36e-72c4-4e21-9410-53729000fb94",
+    "request_id": "601a9d02-64bd-4540-bd0d-b6dbdd88b2fb",
+    "user_id": "goog_nafid_rz",
+    "action": "READ:state",
+    "entity": "state",
+    "entity_id": null,
+    "quarry_id": null,
+    "before_data": null,
+    "after_data": null,
+    "reason": null,
+    "http_method": "GET",
+    "route": "/api/state",
+    "status_code": 200,
+    "ip_address": "127.0.0.1",
+    "user_agent": "curl/7.88.1",
+    "metadata": {
+      "query": {},
+      "duration_ms": 4,
+      "outcome": "SUCCESS",
+      "content_length": 0
+    },
+    "created_at": "2026-10-24T15:15:41.401Z"
+  }
+]

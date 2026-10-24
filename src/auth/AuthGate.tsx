@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { firebaseAuth, getFreshIdToken, signInWithGoogle, signOutCurrentUser } from './firebase-client';
+import { firebaseAuth, getFreshIdToken, isFirebaseConfigured, signInWithGoogle, signOutCurrentUser } from './firebase-client';
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  if (!isFirebaseConfigured) {
+    return <>{children}</>;
+  }
+
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

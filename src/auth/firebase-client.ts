@@ -1,19 +1,18 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, type User } from 'firebase/auth';
 
-function required(name: string): string {
-  const value = import.meta.env[name];
-  if (!value) throw new Error(`Missing required frontend environment variable: ${name}`);
-  return value;
-}
+export const isFirebaseConfigured = Boolean(
+  import.meta.env.VITE_FIREBASE_API_KEY &&
+  import.meta.env.VITE_FIREBASE_PROJECT_ID
+);
 
 const firebaseConfig = {
-  apiKey: required('VITE_FIREBASE_API_KEY'),
-  authDomain: required('VITE_FIREBASE_AUTH_DOMAIN'),
-  projectId: required('VITE_FIREBASE_PROJECT_ID'),
-  storageBucket: required('VITE_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: required('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: required('VITE_FIREBASE_APP_ID'),
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyPlaceholderForLocalDev',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'localhost',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'rz-minetrix-dev',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'rz-minetrix-dev.appspot.com',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '1234567890',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:1234567890:web:abcdef',
 };
 
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);

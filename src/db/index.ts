@@ -12,7 +12,11 @@ export const databaseUrl =
   'postgresql://postgres:postgres@localhost:5432/rz_minetrix';
 
 export const isDatabaseConfigured = (): boolean => {
-  return Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres'));
+  return Boolean(
+    process.env.DATABASE_URL &&
+    process.env.DATABASE_URL.startsWith('postgres') &&
+    process.env.DB_ADAPTER !== 'local-json'
+  );
 };
 
 // Create the connection pool
@@ -20,12 +24,13 @@ export const pool = new Pool({
   connectionString: databaseUrl,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 2000,
 });
 
-pool.on('error', (err) => {
-  console.error('[PostgreSQL Pool Error]: Unexpected client error', err.message);
+pool.on('error', () => {
+  // Suppress unhandled pool error events from uncaught listeners in local dev
 });
+
 
 // Initialize Drizzle ORM instance with full schema
 export const db = drizzle(pool, { schema });
