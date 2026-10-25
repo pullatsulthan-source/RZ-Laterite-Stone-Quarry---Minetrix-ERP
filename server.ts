@@ -1295,6 +1295,13 @@ app.post('/api/import', requireRole(['OWNER', 'ADMIN']), (req: Request, res: Res
 });
 
 // ----------------- VITE SPA / STATIC HANDLER -----------------
+const spaFallbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 async function startServer() {
   await initializePersistence();
   if (process.env.NODE_ENV !== 'production') {
@@ -1305,7 +1312,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.resolve(process.cwd(), 'dist')));
-    app.get('*', (req: Request, res: Response) => {
+    app.get('*', spaFallbackLimiter, (req: Request, res: Response) => {
       res.sendFile(path.resolve(process.cwd(), 'dist/index.html'));
     });
   }
