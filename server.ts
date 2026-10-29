@@ -48,6 +48,7 @@ import {
 } from './src/db/validators.ts';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'quarry_db.json');
@@ -388,6 +389,7 @@ const apiLimiter = rateLimit({
   max: 100, // max 100 requests per IP per window
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
 });
 app.use('/api', apiLimiter);
 app.use('/api', auditRequest);
