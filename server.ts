@@ -1302,6 +1302,7 @@ const spaFallbackLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
 });
 
 async function startServer() {
